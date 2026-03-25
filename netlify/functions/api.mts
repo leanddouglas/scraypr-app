@@ -85,17 +85,15 @@ async function deleteLogs(scraperId: string): Promise<void> {
   await store.delete(scraperId);
 }
 
-async function addLog(scraperId: string, level: string, message: string) {
-  const logs = await getLogs(scraperId);
-  logs.push({
-    id: crypto.randomUUID(),
-    timestamp: new Date().toISOString(),
-    level,
-    message,
-  });
-  // Keep last 100 logs per scraper
-  const trimmed = logs.slice(-100);
-  await saveLogs(scraperId, trimmed);
+// Batched log helper — accumulates in memory, writes once
+function createLogBatch(existing: any[]) {
+  const logs = [...existing];
+  return {
+    add(level: string, message: string) {
+      logs.push({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), level, message });
+    },
+    getLogs() { return logs.slice(-100); }
+  };
 }
 
 // ============ VALIDATION HELPERS ============
@@ -123,13 +121,12 @@ function isValidSelector(sel: string): boolean {
   }
 }
 
-// Fetch with timeout (25s default — Netlify functions have 26s limit)
-async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeoutMs = 25000): Promise<Response> {
+// Fetch with timeout (8s — must fit within Netlify 10s function limit)
+async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { ...opts, signal: controller.signal });
-    return res;
+    return await fetch(url, { ...opts, signal: controller.signal });
   } finally {
     clearTimeout(timer);
   }
@@ -145,7 +142,6 @@ export default async (req: Request, context: Context) => {
     .replace(/\/$/, "") || "/";
   const method = req.method;
 
-  // JSON response helper
   const json = (data: any, status = 200) =>
     new Response(JSON.stringify(data), {
       status,
@@ -153,7 +149,7 @@ export default async (req: Request, context: Context) => {
     });
 
   try {
-    // Parse JSON body safely — only when there's actually content to parse
+    // Parse JSON body safely — only when there's content
     let body: any = null;
     const contentLength = req.headers.get("content-length");
     const hasBody = contentLength !== null && contentLength !== "0" && parseInt(contentLength) > 0;
@@ -185,26 +181,15 @@ export default async (req: Request, context: Context) => {
     // GET /api/scrapers
     if (method === "GET" && path === "/scrapers") {
       const scrapers = await getAllScrapers();
-      const sorted = scrapers.sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-      return json(sorted);
+      return json(scrapers.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     }
 
-    // POST /api/scrapers — with validation
+    // POST /api/scrapers
     if (method === "POST" && path === "/scrapers") {
-      if (!body || !body.url) {
-        return json({ error: "URL is required" }, 400);
-      }
-      if (!isValidUrl(body.url)) {
-        return json({ error: "Invalid URL. Must be a valid http/https URL." }, 400);
-      }
-      if (!body.name || typeof body.name !== "string" || body.name.trim().length === 0) {
-        return json({ error: "Scraper name is required" }, 400);
-      }
-      if (body.name.length > 200) {
-        return json({ error: "Scraper name must be under 200 characters" }, 400);
-      }
+      if (!body || !body.url) return json({ error: "URL is required" }, 400);
+      if (!isValidUrl(body.url)) return json({ error: "Invalid URL. Must be a valid http/https URL." }, 400);
+      if (!body.name || typeof body.name !== "string" || body.name.trim().length === 0) return json({ error: "Scraper name is required" }, 400);
+      if (body.name.length > 200) return json({ error: "Scraper name must be under 200 characters" }, 400);
       const validModes = ["fast-sync", "stealth", "deep-crawl"];
       const mode = validModes.includes(body.mode) ? body.mode : "fast-sync";
       const fields = Array.isArray(body.fields) ? body.fields.map((f: any) => ({
@@ -216,114 +201,80 @@ export default async (req: Request, context: Context) => {
 
       const id = crypto.randomUUID();
       const scraper = {
-        id,
-        name: sanitize(body.name).substring(0, 200),
-        url: body.url.substring(0, 2000),
-        mode,
-        fields,
-        schedule: body.schedule || { enabled: false, frequency: "hourly" },
-        status: "idle",
-        stats: { totalRecords: 0, successRate: 100, lastRun: null, runsCount: 0 },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        id, name: sanitize(body.name).substring(0, 200), url: body.url.substring(0, 2000),
+        mode, fields, schedule: body.schedule || { enabled: false, frequency: "hourly" },
+        status: "idle", stats: { totalRecords: 0, successRate: 100, lastRun: null, runsCount: 0 },
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       };
       await saveScraper(scraper);
-      await addLog(id, "info", `Scraper "${scraper.name}" created`);
       return json(scraper, 201);
     }
 
-    // POST /api/preview-selector — with validation & timeout
+    // POST /api/preview-selector
     if (method === "POST" && path === "/preview-selector") {
-      if (!body?.url || !body?.selector) {
-        return json({ error: "URL and selector are required" }, 400);
-      }
-      if (!isValidUrl(body.url)) {
-        return json({ error: "Invalid URL. Must be a valid http/https URL." }, 400);
-      }
-      if (!isValidSelector(body.selector)) {
-        return json({ error: "Invalid CSS selector" }, 400);
-      }
+      if (!body?.url || !body?.selector) return json({ error: "URL and selector are required" }, 400);
+      if (!isValidUrl(body.url)) return json({ error: "Invalid URL." }, 400);
+      if (!isValidSelector(body.selector)) return json({ error: "Invalid CSS selector" }, 400);
       try {
         const res = await fetchWithTimeout(body.url, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          },
+          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Accept": "text/html,*/*" },
         });
-        if (!res.ok) {
-          return json({ error: `Target site returned ${res.status} ${res.statusText}` }, 502);
-        }
+        if (!res.ok) return json({ error: `Target returned ${res.status}` }, 502);
         const html = await res.text();
         const $ = cheerio.load(html);
         const matches: any[] = [];
         $(body.selector).each((i: number, el: any) => {
-          if (i < 10) {
-            matches.push({
-              index: i,
-              text: $(el).text().trim().substring(0, 200),
-              html: sanitize($.html(el) || "").substring(0, 500),
-            });
-          }
+          if (i < 10) matches.push({ index: i, text: $(el).text().trim().substring(0, 200), html: sanitize($.html(el) || "").substring(0, 500) });
         });
         return json({ matchCount: $(body.selector).length, preview: matches });
       } catch (e: any) {
-        if (e.name === "AbortError") {
-          return json({ error: "Request timed out after 25 seconds" }, 504);
-        }
-        return json({ error: `Failed to fetch target: ${e.message}` }, 502);
+        if (e.name === "AbortError") return json({ error: "Timed out" }, 504);
+        return json({ error: `Failed: ${e.message}` }, 502);
       }
     }
 
-    // Routes with scraper ID: /api/scrapers/:id/...
+    // Routes with scraper ID
     const scraperMatch = path.match(/^\/scrapers\/([^/]+)(\/.*)?$/);
     if (scraperMatch) {
       const id = scraperMatch[1];
       const subPath = scraperMatch[2] || "";
 
-      // GET /api/scrapers/:id
       if (method === "GET" && !subPath) {
         const s = await getScraper(id);
         if (!s) return json({ error: "Scraper not found" }, 404);
         return json(s);
       }
 
-      // PUT /api/scrapers/:id — with validation
       if (method === "PUT" && !subPath) {
         const s = await getScraper(id);
         if (!s) return json({ error: "Scraper not found" }, 404);
         if (body.name) s.name = sanitize(String(body.name)).substring(0, 200);
-        if (body.url) {
-          if (!isValidUrl(body.url)) return json({ error: "Invalid URL" }, 400);
-          s.url = body.url.substring(0, 2000);
-        }
+        if (body.url) { if (!isValidUrl(body.url)) return json({ error: "Invalid URL" }, 400); s.url = body.url.substring(0, 2000); }
         if (body.schedule) s.schedule = body.schedule;
         if (body.fields && Array.isArray(body.fields)) s.fields = body.fields;
         s.updatedAt = new Date().toISOString();
         await saveScraper(s);
-        await addLog(id, "info", "Scraper configuration updated");
         return json(s);
       }
 
-      // DELETE /api/scrapers/:id
       if (method === "DELETE" && !subPath) {
         const s = await getScraper(id);
         if (!s) return json({ error: "Scraper not found" }, 404);
-        await deleteScraper(id);
-        await deleteResults(id);
-        await deleteLogs(id);
+        // Fire deletes in parallel
+        await Promise.all([deleteScraper(id), deleteResults(id), deleteLogs(id)]);
         return json({ success: true });
       }
 
-      // POST /api/scrapers/:id/run — with timeout & validation
+      // POST /api/scrapers/:id/run — OPTIMIZED: minimal blob writes
       if (method === "POST" && subPath === "/run") {
         const s = await getScraper(id);
         if (!s) return json({ error: "Scraper not found" }, 404);
-        if (!s.url || !isValidUrl(s.url)) {
-          return json({ error: "Scraper has no valid URL configured" }, 400);
-        }
-        s.status = "running";
-        await saveScraper(s);
-        await addLog(s.id, "info", `Scrape started for ${s.url}`);
+        if (!s.url || !isValidUrl(s.url)) return json({ error: "Scraper has no valid URL configured" }, 400);
+
+        // Collect logs in memory, write once at end
+        const logBatch = createLogBatch([]);
+        logBatch.add("info", `Scrape started for ${s.url}`);
+
         try {
           const startTime = Date.now();
           const response = await fetchWithTimeout(s.url, {
@@ -333,94 +284,92 @@ export default async (req: Request, context: Context) => {
             },
           });
           if (!response.ok) {
-            await addLog(s.id, "error", `Target returned ${response.status}`);
-            s.status = "error";
-            await saveScraper(s);
+            logBatch.add("error", `Target returned ${response.status}`);
+            s.status = "error"; s.updatedAt = new Date().toISOString();
+            // Parallel writes
+            await Promise.all([saveScraper(s), saveLogs(id, logBatch.getLogs())]);
             return json({ error: `Target site returned ${response.status} ${response.statusText}` }, 502);
           }
+
           const html = await response.text();
-          await addLog(s.id, "info", `Page fetched successfully (${response.status}, ${(html.length / 1024).toFixed(0)}KB)`);
+          logBatch.add("info", `Fetched (${response.status}, ${(html.length / 1024).toFixed(0)}KB)`);
           const $ = cheerio.load(html);
           const results: any[] = [];
+
           if (s.fields && s.fields.length > 0) {
             const firstField = s.fields[0];
             let matches;
-            try {
-              matches = $(firstField.selector);
-            } catch {
-              await addLog(s.id, "error", `Invalid selector: "${firstField.selector}"`);
-              s.status = "error";
-              await saveScraper(s);
-              return json({ error: `Invalid CSS selector: "${firstField.selector}"` }, 400);
+            try { matches = $(firstField.selector); } catch {
+              logBatch.add("error", `Invalid selector: "${firstField.selector}"`);
+              s.status = "error"; s.updatedAt = new Date().toISOString();
+              await Promise.all([saveScraper(s), saveLogs(id, logBatch.getLogs())]);
+              return json({ error: `Invalid CSS selector` }, 400);
             }
-            await addLog(s.id, "info", `Found ${matches.length} matches for "${firstField.name}"`);
+            logBatch.add("info", `Found ${matches.length} matches for "${firstField.name}"`);
             matches.each((i: number, el: any) => {
+              if (i >= 100) return; // Cap at 100 records
               const record: any = { _index: i };
               s.fields.forEach((field: any) => {
                 try {
-                  const globalMatch = $(field.selector).eq(i);
-                  if (field.type === "image") {
-                    record[field.name] = globalMatch.attr("src") || globalMatch.find("img").attr("src") || "";
-                  } else {
-                    record[field.name] = globalMatch.length > 0 ? globalMatch.text().trim() : "";
-                  }
-                } catch {
-                  record[field.name] = "";
-                }
+                  const m = $(field.selector).eq(i);
+                  record[field.name] = field.type === "image"
+                    ? (m.attr("src") || m.find("img").attr("src") || "")
+                    : (m.length > 0 ? m.text().trim() : "");
+                } catch { record[field.name] = ""; }
               });
               results.push(record);
             });
           } else {
             const links: any[] = [];
-            $("a[href]").each((i: number, el: any) => {
-              if (i < 50) {
-                links.push({ text: $(el).text().trim(), href: $(el).attr("href") });
-              }
-            });
+            $("a[href]").each((i: number, el: any) => { if (i < 20) links.push({ text: $(el).text().trim(), href: $(el).attr("href") }); });
             results.push({
-              _type: "auto-extract",
-              pageTitle: $("title").text().trim(),
-              linksCount: $("a[href]").length,
-              imagesCount: $("img[src]").length,
+              _type: "auto-extract", pageTitle: $("title").text().trim(),
+              linksCount: $("a[href]").length, imagesCount: $("img[src]").length,
               headings: $("h1, h2, h3").map((_: number, el: any) => $(el).text().trim()).get().slice(0, 10),
-              sampleLinks: links.slice(0, 20),
+              sampleLinks: links,
             });
           }
+
           const duration = Date.now() - startTime;
-          const existingResults = await getResults(s.id);
           const runResult = { id: crypto.randomUUID(), scraperId: s.id, timestamp: new Date().toISOString(), recordCount: results.length, duration, data: results };
-          existingResults.unshift(runResult);
-          // Keep only the last 20 runs
-          await saveResults(s.id, existingResults.slice(0, 20));
+
+          // Update scraper stats
           s.stats.totalRecords += results.length;
           s.stats.lastRun = new Date().toISOString();
           s.stats.runsCount += 1;
           s.status = "idle";
           s.updatedAt = new Date().toISOString();
-          await saveScraper(s);
-          await addLog(s.id, "success", `Scrape completed: ${results.length} records in ${duration}ms`);
+          logBatch.add("success", `Completed: ${results.length} records in ${duration}ms`);
+
+          // Single parallel write for ALL data at once
+          const existingResults = await getResults(s.id);
+          existingResults.unshift(runResult);
+          await Promise.all([
+            saveScraper(s),
+            saveResults(s.id, existingResults.slice(0, 10)),
+            saveLogs(id, logBatch.getLogs()),
+          ]);
+
           return json({ success: true, recordCount: results.length, duration, runId: runResult.id });
         } catch (e: any) {
-          s.status = "error";
-          await saveScraper(s);
+          s.status = "error"; s.updatedAt = new Date().toISOString();
           if (e.name === "AbortError") {
-            await addLog(s.id, "error", "Scrape timed out after 25 seconds");
-            return json({ error: "Scrape timed out after 25 seconds" }, 504);
+            logBatch.add("error", "Timed out after 8 seconds");
+            await Promise.all([saveScraper(s), saveLogs(id, logBatch.getLogs())]);
+            return json({ error: "Scrape timed out" }, 504);
           }
-          await addLog(s.id, "error", `Scrape failed: ${e.message}`);
+          logBatch.add("error", `Failed: ${e.message}`);
+          await Promise.all([saveScraper(s), saveLogs(id, logBatch.getLogs())]);
           return json({ error: e.message }, 500);
         }
       }
 
-      // GET /api/scrapers/:id/results
       if (method === "GET" && subPath === "/results") {
         const s = await getScraper(id);
         if (!s) return json({ error: "Scraper not found" }, 404);
-        const results = await getResults(id);
-        return json(results);
+        return json(await getResults(id));
       }
 
-      // GET /api/scrapers/:id/logs
       if (method === "GET" && subPath === "/logs") {
         const s = await getScraper(id);
         if (!s) return json({ error: "Scraper not found" }, 404);
@@ -437,5 +386,5 @@ export default async (req: Request, context: Context) => {
 };
 
 export const config: Config = {
-  // Let netlify.toml redirects handle routing (/api/* -> /.netlify/functions/api/:splat)
+  path: "/api/*",
 };
