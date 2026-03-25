@@ -6,8 +6,18 @@ async function fetchJSON(url, opts = {}) {
     ...opts,
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || 'Request failed');
+    // Safely handle non-JSON error responses (e.g., HTML error pages)
+    let errMsg = res.statusText || 'Request failed';
+    try {
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const err = await res.json();
+        errMsg = err.error || errMsg;
+      }
+    } catch {
+      // Ignore JSON parse errors
+    }
+    throw new Error(errMsg);
   }
   return res.json();
 }

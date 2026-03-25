@@ -15,17 +15,19 @@ export default function AddFieldModal({ isOpen, onClose, onAdd, scraperUrl }) {
   });
   const [loading, setLoading] = useState(false);
 
-  // Debounced preview fetch
+  // Debounced preview fetch with cleanup to prevent state updates after unmount
   useEffect(() => {
     if (!scraperUrl || !cssSelector) {
       setPreview({ rawValue: '', formattedValue: '', matchCount: 0 });
       return;
     }
 
+    let cancelled = false;
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
         const result = await api.previewSelector(scraperUrl, cssSelector);
+        if (cancelled) return;
         // API returns { matchCount, preview: [{ index, text, html }] }
         const firstMatch = result?.preview?.[0];
         setPreview({
@@ -34,14 +36,18 @@ export default function AddFieldModal({ isOpen, onClose, onAdd, scraperUrl }) {
           matchCount: result?.matchCount || 0,
         });
       } catch (error) {
+        if (cancelled) return;
         console.error('Preview fetch error:', error);
         setPreview({ rawValue: '', formattedValue: '', matchCount: 0 });
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }, 500);
 
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [scraperUrl, cssSelector]);
 
   const handleSave = () => {

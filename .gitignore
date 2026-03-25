@@ -7,5 +7,3 @@ build-output
 .netlify
 *.local
 .DS_Store
-*.zip
-vite.config.js.timestamp-*

@@ -49,7 +49,8 @@ export default function Dashboard() {
         next.delete(scraperId);
         return next;
       });
-      fetchData();
+      // Refresh data in background, don't block on failure
+      fetchData().catch(() => {});
     } catch (err) {
       console.error('Failed to run scrape:', err);
       setRunningScrapers((prev) => {
@@ -100,7 +101,7 @@ export default function Dashboard() {
       )}
 
       {/* Stats Bento Grid */}
-      {stats && (
+      {(stats || loading) && (
         <section className="px-4 sm:px-6 py-8 sm:py-12 max-w-7xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Total Records */}

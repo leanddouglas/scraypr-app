@@ -16,7 +16,7 @@ export default function ScraperSettings() {
   });
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setsaving] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
@@ -35,8 +35,14 @@ export default function ScraperSettings() {
         frequency: scraperData.schedule?.frequency || 'hourly',
       });
 
-      const logsData = await api.getLogs(scraperId);
-      setLogs(logsData || []);
+      // Load logs separately so a failure doesn't block the whole page
+      try {
+        const logsData = await api.getLogs(scraperId);
+        setLogs(logsData || []);
+      } catch (logErr) {
+        console.error('Failed to load logs:', logErr);
+        setLogs([]);
+      }
     } catch (error) {
       console.error('Failed to load scraper data:', error);
     } finally {
@@ -68,7 +74,7 @@ export default function ScraperSettings() {
 
   const handleSaveChanges = async () => {
     try {
-      setsaving(true);
+      setSaving(true);
       await api.updateScraper(scraperId, {
         name: formData.name,
         url: formData.url,
@@ -82,7 +88,7 @@ export default function ScraperSettings() {
       console.error('Failed to save scraper settings:', error);
       alert('Failed to save scraper settings. Please try again.');
     } finally {
-      setsaving(false);
+      setSaving(false);
     }
   };
 

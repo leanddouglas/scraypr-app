@@ -1,5 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, Component } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+
+// Error Boundary to catch rendering crashes in child pages
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('Page crash:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-[50vh] flex flex-col items-center justify-center px-6 text-center">
+          <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mb-4">
+            <span className="material-symbols-outlined text-red-400 text-3xl">error</span>
+          </div>
+          <h2 className="font-headline font-bold text-xl mb-2 text-on-surface">Something went wrong</h2>
+          <p className="text-on-surface-variant mb-6 max-w-md">{this.state.error?.message || 'An unexpected error occurred.'}</p>
+          <button
+            onClick={() => { this.setState({ hasError: false, error: null }); window.location.href = '/'; }}
+            className="px-6 py-3 bg-primary/20 hover:bg-primary/30 border border-primary/30 rounded-lg font-label font-semibold text-primary transition-all"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const navItems = [
   { path: '/', icon: 'grid_view', filledIcon: 'grid_view', label: 'Dash', desktopLabel: 'Dashboard', desktopIcon: 'dashboard' },
@@ -166,7 +200,9 @@ export default function Layout() {
 
       {/* ===== MAIN CONTENT ===== */}
       <main className="pt-16 lg:pt-0 pb-24 lg:pb-8 lg:ml-64">
-        <Outlet />
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
       </main>
 
       {/* ===== MOBILE BOTTOM NAV ===== */}

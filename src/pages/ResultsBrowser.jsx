@@ -57,7 +57,7 @@ export default function ResultsBrowser() {
   const records = currentRun?.data || [];
 
   // Determine column headers from the first record (excluding _index and _type)
-  const columnKeys = records.length > 0
+  const columnKeys = records.length > 0 && records[0] != null
     ? Object.keys(records[0]).filter(k => !k.startsWith('_'))
     : [];
 
@@ -66,9 +66,20 @@ export default function ResultsBrowser() {
       {/* Header Section */}
       <section className="px-4 sm:px-6 py-8 sm:py-12 border-b border-outline-variant/10">
         <div className="max-w-7xl mx-auto">
-          <h1 className="font-headline text-2xl sm:text-3xl font-extrabold mb-2">
-            Scraped Results
-          </h1>
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="font-headline text-2xl sm:text-3xl font-extrabold">
+              Scraped Results
+            </h1>
+            {selectedScraperId && (
+              <button
+                onClick={() => fetchResults(selectedScraperId)}
+                className="px-4 py-2 bg-primary/20 hover:bg-primary/30 border border-primary/30 rounded-lg font-label text-sm font-semibold text-primary transition-all flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-sm">refresh</span>
+                Refresh
+              </button>
+            )}
+          </div>
           <p className="text-on-surface-variant font-body text-sm mb-6">
             {runs.length} run{runs.length !== 1 ? 's' : ''} found
             {currentRun && ` — viewing ${records.length} record${records.length !== 1 ? 's' : ''} from latest run`}
