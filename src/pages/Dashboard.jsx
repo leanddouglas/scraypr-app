@@ -101,7 +101,7 @@ export default function Dashboard() {
       )}
 
       {/* Stats Bento Grid */}
-      {(stats || loading) && (
+      {stats && (
         <section className="px-4 sm:px-6 py-8 sm:py-12 max-w-7xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Total Records */}
