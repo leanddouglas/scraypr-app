@@ -142,11 +142,16 @@ export default async (req: Request, context: Context) => {
     .replace(/\/$/, "") || "/";
   const method = req.method;
 
-  const json = (data: any, status = 200) =>
-    new Response(JSON.stringify(data), {
+  const json = (data: any, status = 200) => {
+    const body = JSON.stringify(data);
+    return new Response(body, {
       status,
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": String(new TextEncoder().encode(body).length),
+      },
     });
+  };
 
   try {
     // Parse JSON body safely — only when there's content
