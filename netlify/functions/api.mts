@@ -153,11 +153,11 @@ export default async (req: Request, context: Context) => {
     });
 
   try {
-    // Parse JSON body safely — only when there's actually a body to parse
+    // Parse JSON body safely — only when there's actually content to parse
     let body: any = null;
-    const contentType = req.headers.get("content-type") || "";
     const contentLength = req.headers.get("content-length");
-    if ((method === "POST" || method === "PUT") && contentType.includes("application/json") && contentLength !== "0") {
+    const hasBody = contentLength !== null && contentLength !== "0" && parseInt(contentLength) > 0;
+    if ((method === "POST" || method === "PUT") && hasBody) {
       try {
         body = await req.json();
       } catch {
@@ -437,5 +437,5 @@ export default async (req: Request, context: Context) => {
 };
 
 export const config: Config = {
-  path: "/api/*",
+  // Let netlify.toml redirects handle routing (/api/* -> /.netlify/functions/api/:splat)
 };
