@@ -71,9 +71,11 @@ export default async (req: Request, context: Context) => {
     });
 
   try {
-    // Parse JSON body safely
+    // Parse JSON body safely — only when there's actually a body to parse
     let body: any = null;
-    if (method === "POST" || method === "PUT") {
+    const contentType = req.headers.get("content-type") || "";
+    const contentLength = req.headers.get("content-length");
+    if ((method === "POST" || method === "PUT") && contentType.includes("application/json") && contentLength !== "0") {
       try {
         body = await req.json();
       } catch {
