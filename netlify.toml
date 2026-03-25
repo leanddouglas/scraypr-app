@@ -5,15 +5,8 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
-  included_files = ["node_modules/cheerio/**", "node_modules/htmlparser2/**", "node_modules/parse5/**", "node_modules/dom-serializer/**", "node_modules/domhandler/**", "node_modules/domutils/**", "node_modules/entities/**", "node_modules/css-select/**", "node_modules/css-what/**", "node_modules/cheerio-select/**", "node_modules/boolbase/**", "node_modules/nth-check/**"]
 
-# Proxy /api/* to the Netlify function (must come BEFORE the SPA fallback)
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200
-
-# SPA fallback — all other routes serve index.html
+# SPA fallback — all non-file, non-function routes serve index.html
 [[redirects]]
   from = "/*"
   to = "/index.html"
