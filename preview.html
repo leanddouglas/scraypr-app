@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SCRAYPR | Enterprise Web Scraping Platform</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script>
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "surface": "#0a0e14",
+        "primary-container": "#00c1fd",
+        "outline": "#72757d",
+        "on-background": "#f1f3fc",
+        "background": "#0a0e14",
+        "surface-container-lowest": "#000000",
+        "surface-container-low": "#0f141a",
+        "surface-container": "#151a21",
+        "surface-bright": "#262c36",
+        "on-surface-variant": "#a8abb3",
+        "on-primary": "#004259",
+        "secondary": "#929bfa",
+        "tertiary": "#a7e2ff",
+        "error": "#ff716c",
+        "error-dim": "#d7383b",
+        "outline-variant": "#44484f",
+        "on-surface": "#f1f3fc",
+        "secondary-container": "#343d96",
+        "primary-fixed": "#00c1fd",
+        "surface-tint": "#61cdff",
+        "surface-container-highest": "#20262f",
+        "surface-container-high": "#1b2028",
+        "primary": "#61cdff",
+        "primary-dim": "#00b2eb",
+        "tertiary-dim": "#70c9ef",
+        "surface-variant": "#20262f"
+      },
+      fontFamily: {
+        "headline": ["Manrope","sans-serif"],
+        "body": ["Inter","sans-serif"],
+        "label": ["Inter","sans-serif"]
+      },
+    },
+  },
+}
+</script>
+<style>
+body { background:#0a0e14; color:#f1f3fc; font-family:'Inter',sans-serif; }
+.material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
+.material-filled { font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; }
+.glass-card { background:rgba(32,38,47,0.7); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px); box-shadow:0 4px 10px rgba(0,0,0,0.1),0 40px 60px rgba(0,0,0,0.3); }
+.glass-panel { background:rgba(32,38,47,0.7); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px); }
+.gradient-button { background:linear-gradient(135deg,#61cdff 0%,#00c1fd 100%); }
+.glow-input:focus { box-shadow:0 0 15px rgba(97,205,255,0.2); }
+.neo-shadow { box-shadow:0 4px 10px rgba(0,0,0,0.3),0 40px 80px rgba(0,0,0,0.6); }
+.text-glow-primary { text-shadow:0 0 10px rgba(97,205,255,0.5); }
+.inner-glow { box-shadow:inset 0 0 12px rgba(97,205,255,0.1); }
+.hide-scrollbar::-webkit-scrollbar { display:none; }
+.hide-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
+@keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+.animate-slide-up { animation:slideUp 0.3s ease-out; }
+.animate-fade-in { animation:fadeIn 0.3s ease-out; }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.animate-pulse-dot { animation:pulse-dot 2s ease-in-out infinite; }
+</style>
+</head>
+<body class="min-h-screen selection:bg-primary/30">
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ============ NO DEMO DATA — Start empty, only real user-created scrapers ============
+const DEMO_SCRAPERS = [];
+const DEMO_RESULTS = [];
+
+// Note: This preview.html is a standalone UI preview. For real scraping functionality,
+// use the full React app with the backend server (npm start).
+
+// ============ ICON COMPONENT ============
+function Icon({ name, filled, className = '' }) {
+  return <span className={`material-symbols-outlined ${filled ? 'material-filled' : ''} ${className}`}>{name}</span>;
+}
+
+// ============ MAIN APP ============
+function App() {
+  const [page, setPage] = useState('dashboard');
+  const [scrapers, setScrapers] = useState(DEMO_SCRAPERS);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [selectedScraper, setSelectedScraper] = useState(null);
+
+  const navItems = [
+    { id: 'dashboard', icon: 'grid_view', label: 'Dash', dIcon: 'dashboard', dLabel: 'Dashboard' },
+    { id: 'create', icon: 'add_circle', label: 'Create', dIcon: 'travel_explore', dLabel: 'Scrapers' },
+    { id: 'data', icon: 'database', label: 'Data', dIcon: 'database', dLabel: 'Results' },
+    { id: 'guide', icon: 'bolt', label: 'Tools', dIcon: 'menu_book', dLabel: 'Guide' },
+  ];
+
+  const extraNav = [
+    { icon: 'router', label: 'Proxies' },
+    { icon: 'calendar_today', label: 'Schedules' },
+    { icon: 'vpn_key', label: 'API Keys' },
+    { icon: 'terminal', label: 'Logs' },
+  ];
+
+  function addScraper(s) {
+    const newS = { ...s, id: String(Date.now()), status: 'idle', stats: { totalRecords: 0, successRate: 100, lastRun: null, runsCount: 0 }, schedule: { enabled: false, frequency: 'hourly' } };
+    setScrapers(prev => [newS, ...prev]);
+    setPage('dashboard');
+  }
+
+  function runScraper(id) {
+    // In preview mode, scraping is not available — use the full React app with backend
+    alert('Live scraping requires the full app with backend server.\n\nRun: npm start\nThen open: http://localhost:5173');
+  }
+
+  const renderPage = () => {
+    switch(page) {
+      case 'dashboard': return <Dashboard scrapers={scrapers} onRun={runScraper} onNavigate={setPage} onSelectScraper={setSelectedScraper} />;
+      case 'create': return <CreateScraper onAdd={addScraper} />;
+      case 'data': return <ResultsBrowser scrapers={scrapers} selectedId={selectedScraper} />;
+      case 'settings': return <ScraperSettings scraper={scrapers.find(s=>s.id===selectedScraper)} onUpdate={(updated) => setScrapers(prev=>prev.map(s=>s.id===updated.id?updated:s))} onBack={()=>setPage('dashboard')} />;
+      case 'guide': return <UserGuide onNavigate={setPage} />;
+      default: return <Dashboard scrapers={scrapers} onRun={runScraper} onNavigate={setPage} onSelectScraper={setSelectedScraper} />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-surface text-on-surface">
+      {/* DESKTOP SIDEBAR */}
+      <aside className="hidden lg:flex fixed left-0 top-0 h-full flex-col p-4 z-40 bg-slate-950/80 backdrop-blur-2xl w-64 border-r border-slate-800/50 shadow-2xl shadow-black/50">
+        <div className="flex items-center gap-3 mb-10 px-2 pt-4">
+          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+            <Icon name="hub" filled className="text-on-primary text-xl" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-sky-400 font-headline">SCRAYPR</h1>
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Enterprise Scraper</p>
+          </div>
+        </div>
+        <nav className="space-y-2 py-6 flex-grow font-headline text-sm font-semibold">
+          {navItems.map(item => (
+            <button key={item.id} onClick={() => setPage(item.id)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${page === item.id ? 'bg-sky-500/10 text-sky-400 shadow-[inset_0_0_10px_rgba(56,189,248,0.1)]' : 'text-slate-400 hover:text-slate-100 hover:bg-white/5 hover:translate-x-1'}`}>
+              <Icon name={item.dIcon} /><span>{item.dLabel}</span>
+            </button>
+          ))}
+          {extraNav.map(item => (
+            <button key={item.label} className="w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-slate-100 hover:bg-white/5 rounded-xl hover:translate-x-1 transition-all duration-200">
+              <Icon name={item.icon} /><span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="mt-auto space-y-2 border-t border-slate-800/50 pt-6">
+          <button onClick={() => setPage('create')} className="w-full flex items-center justify-center gap-2 py-3 mb-4 rounded-xl gradient-button text-on-primary font-bold shadow-lg shadow-primary/20 active:scale-95 transition-all">
+            <Icon name="add" className="text-lg" /><span>New Scraper</span>
+          </button>
+          <button className="w-full flex items-center gap-3 px-4 py-2 text-slate-500 hover:text-slate-300 transition-all text-sm">
+            <Icon name="description" className="text-lg" /><span>Documentation</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* MOBILE TOP BAR */}
+      <header className="lg:hidden fixed top-0 w-full flex justify-between items-center px-6 h-16 bg-slate-950/70 backdrop-blur-2xl z-50 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)]">
+        <div className="flex items-center gap-4">
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-white active:scale-95"><Icon name="menu" /></button>
+          <h1 className="font-headline font-black tracking-tighter text-blue-400 text-xl">SCRAYPR</h1>
+        </div>
+        <div className="w-10 h-10 rounded-full bg-surface-container-highest border border-outline-variant/20 flex items-center justify-center text-primary">
+          <Icon name="person" />
+        </div>
+      </header>
+
+      {/* DESKTOP TOP BAR */}
+      <header className="hidden lg:flex sticky top-0 w-full items-center justify-between px-8 py-3 bg-slate-900/70 backdrop-blur-xl z-30 shadow-[0_4px_30px_rgba(0,0,0,0.1)] ml-64">
+        <nav className="flex items-center gap-6 font-headline text-sm font-medium">
+          <button onClick={() => setPage('dashboard')} className={page==='dashboard' ? 'text-sky-400 font-bold border-b-2 border-sky-400 pb-1' : 'text-slate-400 hover:text-slate-200 transition-all'}>Overview</button>
+          <button onClick={() => setPage('data')} className={page==='data' ? 'text-sky-400 font-bold border-b-2 border-sky-400 pb-1' : 'text-slate-400 hover:text-slate-200 transition-all'}>Insights</button>
+          <button className="text-slate-400 hover:text-slate-200 transition-all">Billing</button>
+        </nav>
+        <div className="flex items-center gap-4">
+          <div className="relative"><input className="bg-surface-container-lowest text-on-surface border-none rounded-full py-1.5 pl-10 pr-4 text-sm w-64 focus:ring-2 focus:ring-primary transition-all outline-none" placeholder="Search clusters..." /><Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm" /></div>
+          <div className="flex items-center gap-2">
+            <button className="p-2 text-slate-400 hover:bg-white/5 rounded-full"><Icon name="notifications" /></button>
+            <button className="p-2 text-slate-400 hover:bg-white/5 rounded-full"><Icon name="help" /></button>
+            <button className="p-2 text-slate-400 hover:bg-white/5 rounded-full"><Icon name="settings" /></button>
+            <div className="w-8 h-8 rounded-full bg-surface-container-highest ml-2 border border-outline-variant/20 flex items-center justify-center text-primary"><Icon name="person" className="text-sm" /></div>
+          </div>
+        </div>
+      </header>
+
+      {/* MAIN CONTENT */}
+      <main className="pt-16 lg:pt-0 pb-28 lg:pb-8 lg:ml-64">
+        {renderPage()}
+      </main>
+
+      {/* MOBILE BOTTOM NAV */}
+      <nav className="lg:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-slate-900/60 backdrop-blur-2xl rounded-t-[3rem] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+        {navItems.map(item => (
+          <button key={item.id} onClick={() => setPage(item.id)}
+            className={`flex flex-col items-center justify-center transition-all active:scale-90 duration-300 ${page === item.id ? 'bg-blue-500/20 text-blue-400 rounded-full px-5 py-2 shadow-[0_0_15px_rgba(33,150,243,0.3)]' : 'text-slate-500 opacity-60 hover:opacity-100'}`}>
+            <Icon name={item.icon} filled={page===item.id} />
+            <span className="font-label text-[10px] font-medium uppercase tracking-widest mt-1">{item.label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {/* MOBILE SIDEBAR */}
+      {sidebarOpen && (
+        <div className="lg:hidden fixed inset-0 z-[60]" onClick={() => setSidebarOpen(false)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" />
+          <aside className="absolute left-0 top-0 h-full w-72 bg-slate-950/95 backdrop-blur-2xl p-6 shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="font-headline font-black text-blue-400 text-xl">SCRAYPR</h2>
+              <button onClick={() => setSidebarOpen(false)} className="text-slate-400"><Icon name="close" /></button>
+            </div>
+            <nav className="space-y-2">
+              {navItems.map(item => (
+                <button key={item.id} onClick={() => { setPage(item.id); setSidebarOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${page === item.id ? 'bg-sky-500/10 text-sky-400' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+                  <Icon name={item.dIcon} /><span className="font-headline font-semibold">{item.dLabel}</span>
+                </button>
+              ))}
+            </nav>
+          </aside>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ DASHBOARD ============
+function Dashboard({ scrapers, onRun, onNavigate, onSelectScraper }) {
+  const [syncDialog, setSyncDialog] = useState(null);
+  const totalRecords = scrapers.reduce((a, s) => a + s.stats.totalRecords, 0);
+  const avgSuccess = scrapers.length > 0 ? (scrapers.reduce((a, s) => a + s.stats.successRate, 0) / scrapers.length).toFixed(1) : 100;
+  const activeCount = scrapers.filter(s => s.status === 'running').length;
+
+  function handleRun(scraper) {
+    onRun(scraper.id);
+    setTimeout(() => {
+      setSyncDialog({ name: scraper.name, count: Math.floor(Math.random()*150)+50 });
+    }, 3100);
+  }
+
+  return (
+    <div className="px-6 py-8 lg:p-8 max-w-7xl mx-auto">
+      {/* Desktop Header */}
+      <div className="hidden lg:flex justify-between items-end mb-10">
+        <div>
+          <h2 className="text-4xl font-extrabold font-headline tracking-tight mb-2">Fleet Overview</h2>
+          <p className="text-on-surface-variant max-w-lg">Monitoring {scrapers.length} active data pipelines. Real-time extraction throughput is currently optimal.</p>
+        </div>
+        <div className="flex bg-surface-container-low p-1 rounded-full border border-outline-variant/10">
+          <button className="px-6 py-2 bg-primary text-on-primary font-bold rounded-full text-sm">Real-time</button>
+          <button className="px-6 py-2 text-on-surface-variant font-medium text-sm hover:text-on-surface transition-colors">Historical</button>
+        </div>
+      </div>
+
+      {/* Mobile Header */}
+      <div className="lg:hidden mb-8">
+        <span className="text-primary font-bold tracking-[0.2em] uppercase text-xs">Quantum Extraction</span>
+        <h2 className="text-3xl font-headline font-extrabold tracking-tight mt-2 mb-3">Data Command</h2>
+        <p className="text-on-surface-variant text-sm">Monitor your high-velocity data operations in real-time.</p>
+        <button onClick={() => onNavigate('create')} className="mt-4 gradient-button text-on-primary px-6 py-3 rounded-full font-bold text-sm shadow-lg shadow-primary/20 active:scale-95 transition-all flex items-center gap-2">
+          <Icon name="rocket_launch" className="text-lg" /> Start Scrape
+        </button>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 lg:gap-6 mb-8 lg:mb-10">
+        {/* Total Records */}
+        <div className="md:col-span-2 glass-card p-6 lg:p-8 rounded-xl border border-outline-variant/10 relative overflow-hidden group">
+          <div className="absolute top-4 right-4 lg:top-6 lg:right-8"><Icon name="speed" className="text-primary/20 text-5xl lg:text-6xl group-hover:scale-110 transition-transform" /></div>
+          <p className="text-on-surface-variant font-medium mb-1 uppercase tracking-widest text-xs">Total Records</p>
+          <h3 className="text-4xl lg:text-5xl font-black font-headline text-glow-primary mb-3">{(totalRecords/1000).toFixed(0)}K</h3>
+          <div className="h-12 lg:h-16 flex items-end gap-1">
+            {[50,75,66,100,85,75,66,50,75,100,85,50].map((h,i) => (
+              <div key={i} className="w-2 rounded-full transition-all" style={{height:`${h}%`, background:`rgba(97,205,255,${0.2+i*0.07})`}} />
+            ))}
+          </div>
+        </div>
+        {/* Success Rate */}
+        <div className="glass-card p-6 lg:p-8 rounded-xl border border-outline-variant/10">
+          <p className="text-on-surface-variant font-medium mb-1 uppercase tracking-widest text-xs">Success Rate</p>
+          <h3 className="text-3xl lg:text-4xl font-bold font-headline mb-4 lg:mb-6">{avgSuccess}%</h3>
+          <div className="w-full bg-surface-container-lowest h-3 rounded-full overflow-hidden">
+            <div className="bg-primary h-full rounded-full shadow-[0_0_8px_#61cdff]" style={{width:`${avgSuccess}%`}} />
+          </div>
+          <p className="text-xs text-on-surface-variant mt-3 flex items-center gap-1"><Icon name="check_circle" className="text-sm text-primary" /> No blockages in 24h</p>
+        </div>
+        {/* Active Scrapers */}
+        <div className="glass-card p-6 lg:p-8 rounded-xl border border-outline-variant/10">
+          <p className="text-on-surface-variant font-medium mb-1 uppercase tracking-widest text-xs">Active Nodes</p>
+          <h3 className="text-3xl lg:text-4xl font-bold font-headline mb-4 lg:mb-6">{scrapers.length} <span className="text-sm font-normal text-on-surface-variant">scrapers</span></h3>
+          <div className="flex flex-wrap gap-1">
+            {scrapers.map((s,i) => (
+              <div key={i} className={`w-3 h-3 rounded-sm ${s.status === 'running' ? 'bg-primary/80 animate-pulse' : s.status === 'error' ? 'bg-error/80' : 'bg-primary/40'}`} />
+            ))}
+            {Array(9).fill(0).map((_,i) => <div key={`p${i}`} className="w-3 h-3 rounded-sm bg-primary/20" />)}
+          </div>
+          <p className="text-xs text-on-surface-variant mt-3">{activeCount} actively running</p>
+        </div>
+      </div>
+
+      {/* Active Pipelines */}
+      <div className="mb-4 lg:mb-6 flex items-center justify-between">
+        <h4 className="text-xl lg:text-2xl font-bold font-headline">Active Pipelines</h4>
+        <button className="text-primary font-bold text-sm hover:underline">View All Clusters</button>
+      </div>
+      <div className="space-y-3 lg:space-y-4">
+        {scrapers.map(scraper => {
+          const isRunning = scraper.status === 'running';
+          return (
+            <div key={scraper.id} className="glass-card rounded-xl border border-outline-variant/10 p-4 lg:p-6 hover:bg-white/5 transition-all group">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-4 lg:gap-6">
+                  <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-lg bg-surface-container-highest flex items-center justify-center text-primary border border-outline-variant/20">
+                    <Icon name={scraper.fields[0]?.icon || 'language'} />
+                  </div>
+                  <div>
+                    <h5 className="text-base lg:text-lg font-bold font-headline mb-0.5">{scraper.name}</h5>
+                    <div className="flex items-center gap-3 text-xs lg:text-sm text-on-surface-variant">
+                      <span className="flex items-center gap-1">
+                        <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-primary animate-pulse-dot' : scraper.status === 'scheduled' ? 'bg-secondary' : 'bg-outline'}`} />
+                        {isRunning ? 'Running' : scraper.status === 'scheduled' ? 'Scheduled' : 'Idle'}
+                      </span>
+                      <span>•</span>
+                      <span>{scraper.stats.lastRun ? `Updated ${Math.floor(Math.random()*30)+1}m ago` : 'Never run'}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-6 lg:gap-12">
+                  <div className="text-right hidden md:block">
+                    <p className="text-xs uppercase tracking-widest text-on-surface-variant mb-1">Extraction Count</p>
+                    <p className="text-lg lg:text-xl font-bold font-headline">{scraper.stats.totalRecords > 1000 ? `${(scraper.stats.totalRecords/1000000).toFixed(1)}M` : scraper.stats.totalRecords} <span className="text-xs text-primary">{scraper.stats.runsCount > 0 ? `+${Math.floor(Math.random()*15)}%` : ''}</span></p>
+                  </div>
+                  <div className="text-right hidden md:block">
+                    <p className="text-xs uppercase tracking-widest text-on-surface-variant mb-1">Avg Latency</p>
+                    <p className="text-lg lg:text-xl font-bold font-headline">{Math.floor(Math.random()*600)+200}ms</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleRun(scraper)} disabled={isRunning}
+                      className={`px-3 py-2 rounded-lg text-sm font-bold transition-all ${isRunning ? 'bg-primary/10 text-primary/50 cursor-wait' : 'bg-primary/20 text-primary hover:bg-primary/30 active:scale-95'}`}>
+                      {isRunning ? <span className="flex items-center gap-1"><Icon name="sync" className="text-sm animate-spin" /> Running</span> : 'Run'}
+                    </button>
+                    <button onClick={() => { onSelectScraper(scraper.id); onNavigate('settings'); }}
+                      className="p-2 rounded-lg bg-surface-container-highest text-on-surface hover:bg-primary hover:text-on-primary transition-all">
+                      <Icon name="chevron_right" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Sync Dialog */}
+      {syncDialog && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in" onClick={() => setSyncDialog(null)}>
+          <div className="glass-card rounded-2xl p-8 max-w-sm w-full text-center neo-shadow animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
+              <Icon name="check_circle" filled className="text-primary text-4xl" />
+            </div>
+            <h3 className="font-headline font-bold text-2xl mb-2">Sync Complete</h3>
+            <p className="text-primary font-bold mb-1">{syncDialog.count} new records processed</p>
+            <p className="text-on-surface-variant text-sm mb-6">from {syncDialog.name}</p>
+            <button onClick={() => { setSyncDialog(null); onNavigate('data'); }} className="w-full py-3 gradient-button text-on-primary rounded-xl font-bold mb-3 active:scale-95 transition-all">View Results</button>
+            <button onClick={() => setSyncDialog(null)} className="w-full py-3 text-on-surface-variant hover:text-on-surface transition-colors font-medium">Dismiss</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ CREATE SCRAPER ============
+function CreateScraper({ onAdd }) {
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
+  const [mode, setMode] = useState('fast-sync');
+  const [fields, setFields] = useState({ title: true, price: true, ratings: false, images: false });
+  const [customFields, setCustomFields] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+
+  const defaultFields = [
+    { key: 'title', name: 'Product Title', icon: 'title', selector: 'h1, .title' },
+    { key: 'price', name: 'Pricing Data', icon: 'payments', selector: '.price' },
+    { key: 'ratings', name: 'Ratings', icon: 'star', selector: '.rating' },
+    { key: 'images', name: 'Image URLs', icon: 'image', selector: 'img[src]' },
+  ];
+
+  function handleSubmit() {
+    const allFields = [
+      ...defaultFields.filter(f => fields[f.key]).map(f => ({ name: f.name, selector: f.selector, type: 'text', icon: f.icon })),
+      ...customFields,
+    ];
+    onAdd({ name: name || 'Untitled Scraper', url, mode, fields: allFields });
+  }
+
+  return (
+    <div className="px-6 py-8 lg:p-8 max-w-6xl mx-auto">
+      <section className="mb-8 lg:mb-12">
+        <span className="text-primary font-bold tracking-[0.2em] uppercase text-xs">Extraction Engine</span>
+        <h2 className="text-3xl lg:text-5xl font-headline font-extrabold tracking-tight mt-2 mb-3 bg-gradient-to-r from-white to-on-surface-variant bg-clip-text text-transparent">Configure New Scraper</h2>
+        <p className="text-on-surface-variant max-w-xl text-sm lg:text-lg">Define your target intelligence parameters. Our AI-driven protocol will adapt to the site's structure automatically.</p>
+      </section>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+        <div className="lg:col-span-7 space-y-6 lg:space-y-8">
+          {/* Source & Protocol */}
+          <div className="glass-panel p-6 lg:p-8 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-outline-variant/10">
+            <div className="flex items-center gap-4 mb-6 lg:mb-8">
+              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">1</div>
+              <h3 className="text-xl lg:text-2xl font-headline font-bold">Source & Protocol</h3>
+            </div>
+            <div className="space-y-4 lg:space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-on-surface-variant mb-2 ml-1">Scraper Identifier</label>
+                <input value={name} onChange={e => setName(e.target.value)} className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/30 focus:ring-2 focus:ring-primary rounded-lg py-3 lg:py-4 px-5 text-on-surface glow-input transition-all placeholder:opacity-30 outline-none" placeholder="e.g. Amazon Competitor Analysis" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-on-surface-variant mb-2 ml-1">Target URL</label>
+                <div className="relative">
+                  <input value={url} onChange={e => setUrl(e.target.value)} className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/30 focus:ring-2 focus:ring-primary rounded-lg py-3 lg:py-4 px-12 text-on-surface glow-input transition-all placeholder:opacity-30 outline-none" placeholder="https://example.com/products" />
+                  <Icon name="link" className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant opacity-50" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 lg:gap-4 pt-2">
+                <button onClick={() => setMode('fast-sync')} className={`p-3 lg:p-4 rounded-lg border cursor-pointer transition-colors text-left ${mode === 'fast-sync' ? 'bg-surface-container-high border-primary/30' : 'bg-surface-container-low border-outline-variant/10 opacity-50 hover:opacity-80'}`}>
+                  <div className="flex justify-between items-start mb-2">
+                    <Icon name="bolt" filled={mode==='fast-sync'} className="text-primary" />
+                    <div className={`w-4 h-4 rounded-full border-2 ${mode==='fast-sync' ? 'border-primary' : 'border-outline-variant'} flex items-center justify-center`}>
+                      {mode==='fast-sync' && <div className="w-2 h-2 rounded-full bg-primary" />}
+                    </div>
+                  </div>
+                  <div className="text-sm font-bold">Fast-Sync</div>
+                  <div className="text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">Direct API Access</div>
+                </button>
+                <button onClick={() => setMode('stealth')} className={`p-3 lg:p-4 rounded-lg border cursor-pointer transition-colors text-left ${mode === 'stealth' ? 'bg-surface-container-high border-primary/30' : 'bg-surface-container-low border-outline-variant/10 opacity-50 hover:opacity-80'}`}>
+                  <div className="flex justify-between items-start mb-2">
+                    <Icon name="shield" className={mode==='stealth' ? 'text-primary' : 'text-on-surface-variant'} />
+                    <div className={`w-4 h-4 rounded-full border-2 ${mode==='stealth' ? 'border-primary' : 'border-outline-variant'} flex items-center justify-center`}>
+                      {mode==='stealth' && <div className="w-2 h-2 rounded-full bg-primary" />}
+                    </div>
+                  </div>
+                  <div className="text-sm font-bold">Stealth-Mode</div>
+                  <div className="text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">Rotating Proxies</div>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Field Selection */}
+          <div className="glass-panel p-6 lg:p-8 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-outline-variant/10">
+            <div className="flex items-center gap-4 mb-6 lg:mb-8">
+              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">2</div>
+              <h3 className="text-xl lg:text-2xl font-headline font-bold">Field Selection</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:gap-4">
+              {defaultFields.map(f => (
+                <button key={f.key} onClick={() => setFields(prev => ({...prev, [f.key]: !prev[f.key]}))}
+                  className="flex items-center justify-between p-3 lg:p-4 rounded-lg bg-surface-container-high/50 hover:bg-surface-container-highest transition-colors">
+                  <div className="flex items-center gap-3">
+                    <Icon name={f.icon} className={fields[f.key] ? 'text-primary' : 'text-on-surface-variant'} />
+                    <span className="font-medium text-sm">{f.name}</span>
+                  </div>
+                  <div className={`w-11 h-6 rounded-full relative p-1 cursor-pointer transition-colors ${fields[f.key] ? 'bg-primary' : 'bg-outline-variant'}`}>
+                    <div className={`absolute top-1 w-4 h-4 rounded-full shadow-sm transition-all ${fields[f.key] ? 'right-1 bg-on-primary' : 'left-1 bg-surface'}`} />
+                  </div>
+                </button>
+              ))}
+            </div>
+            {customFields.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {customFields.map((cf, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-primary/5 border border-primary/10">
+                    <div className="flex items-center gap-3">
+                      <Icon name="code" className="text-primary" />
+                      <div>
+                        <span className="font-medium text-sm">{cf.name}</span>
+                        <span className="text-xs text-on-surface-variant ml-2 font-mono">{cf.selector}</span>
+                      </div>
+                    </div>
+                    <button onClick={() => setCustomFields(prev => prev.filter((_,j)=>j!==i))} className="text-error/60 hover:text-error"><Icon name="close" className="text-lg" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button onClick={() => setShowModal(true)} className="mt-6 lg:mt-8 w-full py-3 lg:py-4 border-2 border-dashed border-outline-variant/30 rounded-lg text-on-surface-variant hover:text-primary hover:border-primary/50 transition-all flex items-center justify-center gap-2 font-medium">
+              <Icon name="add" /> Add Custom Selector
+            </button>
+          </div>
+        </div>
+
+        {/* Right: Preview */}
+        <div className="lg:col-span-5 lg:sticky lg:top-24">
+          <div className="relative group">
+            <div className="absolute -top-10 -right-10 w-40 h-40 bg-primary/20 blur-[80px] rounded-full" />
+            <div className="absolute -bottom-10 -left-10 w-60 h-60 bg-secondary/10 blur-[100px] rounded-full" />
+            <div className="glass-panel overflow-hidden rounded-xl border border-outline-variant/20 shadow-2xl relative z-10">
+              <div className="bg-surface-container-high px-4 lg:px-6 py-3 lg:py-4 flex items-center justify-between">
+                <div className="flex gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-error-dim" />
+                  <div className="w-3 h-3 rounded-full bg-tertiary-dim" />
+                  <div className="w-3 h-3 rounded-full bg-primary-dim" />
+                </div>
+                <div className="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Live Preview Engine</div>
+              </div>
+              <div className="aspect-[4/3] relative bg-gradient-to-br from-surface-container-low to-surface p-6 lg:p-8">
+                <div className="absolute inset-0 hero-gradient opacity-50" style={{background:'radial-gradient(circle at 50% 50%, rgba(97,205,255,0.08) 0%, transparent 70%)'}} />
+                <div className="relative z-10 space-y-4">
+                  <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-primary animate-pulse" /><span className="text-xs font-bold tracking-widest uppercase text-on-surface-variant">Analyzing DOM Structure...</span></div>
+                  <div className="space-y-3 mt-4">
+                    <div className="h-2 w-full bg-surface-container-lowest rounded-full overflow-hidden"><div className="h-full w-2/3 bg-primary rounded-full animate-pulse" /></div>
+                    <div className="h-2 w-full bg-surface-container-lowest rounded-full overflow-hidden"><div className="h-full w-1/2 bg-primary/40 rounded-full" /></div>
+                    <div className="h-2 w-3/4 bg-surface-container-lowest rounded-full overflow-hidden"><div className="h-full w-1/3 bg-primary/20 rounded-full" /></div>
+                  </div>
+                  {url && <div className="mt-6 p-3 rounded-lg bg-black/20 border border-outline-variant/10"><p className="text-xs text-on-surface-variant font-mono truncate">{url}</p></div>}
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    {defaultFields.filter(f => fields[f.key]).map(f => (
+                      <div key={f.key} className="bg-surface-container-highest/50 rounded-lg p-2 text-xs flex items-center gap-1"><Icon name={f.icon} className="text-primary text-sm" />{f.name}</div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="mt-6 lg:mt-8 flex gap-3 lg:gap-4 relative z-10">
+              <button onClick={handleSubmit} className="flex-1 py-3 lg:py-4 px-6 rounded-full gradient-button text-on-primary font-bold shadow-[0_10px_30px_rgba(97,205,255,0.3)] active:scale-95 transition-all text-sm lg:text-base">Initialize Scraper</button>
+              <button className="p-3 lg:p-4 rounded-full bg-surface-container-high text-on-surface border border-outline-variant/20 active:scale-95 transition-all"><Icon name="save" /></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Add Field Modal */}
+      {showModal && <AddFieldModal onClose={() => setShowModal(false)} onAdd={(field) => { setCustomFields(prev => [...prev, field]); setShowModal(false); }} scraperUrl={url} />}
+    </div>
+  );
+}
+
+// ============ ADD FIELD MODAL ============
+function AddFieldModal({ onClose, onAdd, scraperUrl }) {
+  const [fieldName, setFieldName] = useState('');
+  const [selector, setSelector] = useState('');
+  const [advOpen, setAdvOpen] = useState(false);
+  const [regex, setRegex] = useState('');
+  const [previewData, setPreviewData] = useState({ raw: '<span class="val">$3,450.00</span>', formatted: '$3,450.00', count: 24 });
+
+  function handleSave() {
+    if (!fieldName || !selector) return;
+    onAdd({ name: fieldName, selector, regex, type: 'text', icon: 'code' });
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
+      <div className="fixed top-[-10%] left-[-10%] w-[50%] h-[50%] bg-primary/10 blur-[120px] rounded-full z-0 pointer-events-none" />
+      <div className="relative z-10 w-full max-w-2xl glass-panel rounded-xl neo-shadow overflow-hidden max-h-[90vh] overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
+        <div className="px-6 lg:px-8 pt-8 lg:pt-10 pb-4 lg:pb-6 flex justify-between items-start">
+          <div>
+            <h2 className="font-headline font-extrabold text-2xl lg:text-3xl tracking-tight">Add Custom Field</h2>
+            <p className="text-on-surface-variant mt-2 text-sm">Define a new extraction target using CSS selectors.</p>
+          </div>
+          <button onClick={onClose} className="text-on-surface-variant hover:text-white transition-colors p-2 bg-surface-container-high rounded-full"><Icon name="close" /></button>
+        </div>
+        <div className="px-6 lg:px-8 pb-8 lg:pb-10 space-y-6 lg:space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
+            <div className="space-y-3">
+              <label className="font-label text-xs uppercase tracking-[0.15em] text-on-surface-variant px-1">Field Name</label>
+              <input value={fieldName} onChange={e => setFieldName(e.target.value)} className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/30 rounded-full py-3 lg:py-4 px-6 text-on-surface placeholder:text-on-surface-variant/40 focus:ring-primary focus:ring-2 transition-all outline-none" placeholder="e.g. Product Price" />
+            </div>
+            <div className="space-y-3">
+              <label className="font-label text-xs uppercase tracking-[0.15em] text-on-surface-variant px-1">CSS Selector</label>
+              <div className="flex gap-2">
+                <input value={selector} onChange={e => setSelector(e.target.value)} className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant/30 rounded-full py-3 lg:py-4 px-6 text-on-surface font-mono text-sm placeholder:text-on-surface-variant/40 focus:ring-primary focus:ring-2 transition-all outline-none" placeholder=".price--current" />
+                <button className="bg-surface-container-high hover:bg-surface-container-highest text-primary rounded-full px-4 flex items-center justify-center transition-all active:scale-95"><Icon name="near_me" className="text-xl" /></button>
+              </div>
+            </div>
+          </div>
+          <button className="w-full gradient-button text-on-primary py-4 lg:py-5 rounded-full font-headline font-bold text-base lg:text-lg flex items-center justify-center gap-3 shadow-[0_0_25px_rgba(97,205,255,0.2)] active:scale-[0.98] transition-all group">
+            <Icon name="ads_click" className="font-bold group-hover:rotate-12 transition-transform" /> Select target from active page
+          </button>
+          {/* Advanced */}
+          <div className="bg-surface-container-low/50 rounded-lg p-4 lg:p-6 inner-glow border border-outline-variant/10">
+            <button onClick={() => setAdvOpen(!advOpen)} className="w-full flex items-center justify-between cursor-pointer group">
+              <div className="flex items-center gap-3"><Icon name="settings_input_component" className="text-secondary" /><span className="font-headline font-bold tracking-wide">Advanced Selectors</span></div>
+              <Icon name={advOpen ? 'expand_less' : 'expand_more'} className="text-on-surface-variant group-hover:text-on-surface transition-colors" />
+            </button>
+            {advOpen && (
+              <div className="mt-4 pt-4 border-t border-outline-variant/10 space-y-4 animate-slide-up">
+                <div><label className="text-xs text-on-surface-variant uppercase tracking-wider mb-1 block">Regex Pattern</label>
+                <input value={regex} onChange={e => setRegex(e.target.value)} className="w-full bg-surface-container-lowest ring-1 ring-outline-variant/30 rounded-lg py-3 px-4 text-on-surface font-mono text-sm focus:ring-primary focus:ring-2 outline-none border-none" placeholder="\\d+\\.?\\d*" /></div>
+                <div><label className="text-xs text-on-surface-variant uppercase tracking-wider mb-1 block">Attribute Filter</label>
+                <input className="w-full bg-surface-container-lowest ring-1 ring-outline-variant/30 rounded-lg py-3 px-4 text-on-surface font-mono text-sm focus:ring-primary focus:ring-2 outline-none border-none" placeholder="data-price, aria-label" /></div>
+              </div>
+            )}
+          </div>
+          {/* Preview */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 px-1"><Icon name="visibility" filled className="text-tertiary-dim text-sm" /><label className="font-label text-xs uppercase tracking-[0.15em] text-on-surface-variant">Live Data Preview</label></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:gap-4">
+              <div className="bg-surface-container-high/40 rounded-lg p-4 lg:p-5 border border-outline-variant/5">
+                <p className="text-[10px] text-on-surface-variant uppercase tracking-widest mb-2 font-semibold">Raw Value</p>
+                <div className="font-mono text-sm text-on-surface truncate bg-black/20 p-2 rounded">{previewData.raw}</div>
+              </div>
+              <div className="bg-primary/5 rounded-lg p-4 lg:p-5 border border-primary/10">
+                <p className="text-[10px] text-primary uppercase tracking-widest mb-2 font-semibold">Formatted Result</p>
+                <div className="font-headline font-black text-2xl text-on-surface">{previewData.formatted}</div>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-3 lg:gap-4 pt-4">
+            <button onClick={onClose} className="px-6 lg:px-8 py-3 rounded-full text-on-surface-variant font-headline font-bold hover:bg-surface-container-high transition-colors">Cancel</button>
+            <button onClick={handleSave} className="px-8 lg:px-10 py-3 rounded-full bg-surface-container-highest text-primary font-headline font-bold ring-1 ring-primary/20 hover:ring-primary/50 transition-all active:scale-95">Save Field</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ RESULTS BROWSER ============
+function ResultsBrowser({ scrapers, selectedId }) {
+  const [filter, setFilter] = useState('all');
+  const [view, setView] = useState('grid');
+
+  const filteredResults = filter === 'all' ? DEMO_RESULTS : DEMO_RESULTS.filter(r => r.source.toLowerCase().includes(filter));
+
+  return (
+    <div className="px-6 py-8 lg:p-8 max-w-7xl mx-auto">
+      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between mb-8">
+        <div>
+          <div className="flex items-center gap-2 mb-2"><span className="px-2 py-0.5 bg-primary/20 text-primary text-[10px] font-bold uppercase tracking-widest rounded-full">Live Extraction</span></div>
+          <h2 className="text-3xl lg:text-4xl font-headline font-extrabold tracking-tight">Marketplace Results</h2>
+          <p className="text-on-surface-variant text-sm mt-1">{filteredResults.length} results • Recently Added</p>
+        </div>
+        <div className="flex items-center gap-3 mt-4 lg:mt-0">
+          <div className="flex bg-surface-container-low p-1 rounded-full border border-outline-variant/10">
+            <button onClick={() => setFilter('all')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${filter === 'all' ? 'bg-primary text-on-primary' : 'text-on-surface-variant'}`}>All</button>
+            <button onClick={() => setFilter('facebook')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${filter === 'facebook' ? 'bg-primary text-on-primary' : 'text-on-surface-variant'}`}>Facebook</button>
+            <button onClick={() => setFilter('amazon')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${filter === 'amazon' ? 'bg-primary text-on-primary' : 'text-on-surface-variant'}`}>Amazon</button>
+          </div>
+          <button onClick={() => setView(view === 'grid' ? 'list' : 'grid')} className="p-2 rounded-lg bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors">
+            <Icon name={view === 'grid' ? 'view_list' : 'grid_view'} />
+          </button>
+        </div>
+      </div>
+
+      <div className={view === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6' : 'space-y-4'}>
+        {filteredResults.map((item, i) => (
+          <div key={i} className={`glass-card rounded-xl overflow-hidden border border-outline-variant/10 hover:border-primary/20 transition-all group ${view === 'list' ? 'flex' : ''}`}>
+            <div className={`relative overflow-hidden ${view === 'list' ? 'w-40 flex-shrink-0' : 'aspect-[4/3]'}`}>
+              <img src={item.image} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full">
+                <span className="text-primary font-headline font-black text-lg">{item.price}</span>
+              </div>
+            </div>
+            <div className="p-4 lg:p-5">
+              <h3 className="font-headline font-bold text-base mb-1 line-clamp-2">{item.title}</h3>
+              <div className="flex items-center gap-2 text-xs text-on-surface-variant">
+                <Icon name="location_on" className="text-sm" />{item.location}
+              </div>
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-outline-variant/10">
+                <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">{item.source}</span>
+                <span className="text-[10px] text-on-surface-variant">{item.time}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom Stats */}
+      <div className="mt-8 grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="glass-panel p-4 rounded-xl border border-outline-variant/10 text-center">
+          <Icon name="trending_up" className="text-primary text-2xl mb-1" />
+          <div className="font-headline font-bold text-lg">+12.4%</div>
+          <div className="text-[10px] text-on-surface-variant uppercase tracking-wider">Market Flux</div>
+        </div>
+        <div className="glass-panel p-4 rounded-xl border border-outline-variant/10 text-center">
+          <Icon name="notifications_active" className="text-secondary text-2xl mb-1" />
+          <div className="font-headline font-bold text-lg">Smart Alert</div>
+          <div className="text-[10px] text-on-surface-variant uppercase tracking-wider">Price Drop</div>
+        </div>
+        <div className="glass-panel p-4 rounded-xl border border-outline-variant/10 text-center">
+          <Icon name="speed" className="text-tertiary text-2xl mb-1" />
+          <div className="font-headline font-bold text-lg">42.8 r/s</div>
+          <div className="text-[10px] text-on-surface-variant uppercase tracking-wider">Velocity</div>
+        </div>
+        <div className="glass-panel p-4 rounded-xl border border-outline-variant/10 text-center">
+          <Icon name="check_circle" className="text-primary text-2xl mb-1" />
+          <div className="font-headline font-bold text-lg">99.4%</div>
+          <div className="text-[10px] text-on-surface-variant uppercase tracking-wider">Uptime</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ SCRAPER SETTINGS ============
+function ScraperSettings({ scraper, onUpdate, onBack }) {
+  const [name, setName] = useState(scraper?.name || '');
+  const [url, setUrl] = useState(scraper?.url || '');
+  const [autoScrape, setAutoScrape] = useState(scraper?.schedule?.enabled || false);
+  const [freq, setFreq] = useState(scraper?.schedule?.frequency || 'hourly');
+  const [saved, setSaved] = useState(false);
+  const [activeTab, setActiveTab] = useState('config');
+
+  useEffect(() => { if(scraper){ setName(scraper.name); setUrl(scraper.url); setAutoScrape(scraper.schedule?.enabled); setFreq(scraper.schedule?.frequency); }}, [scraper]);
+
+  function handleSave() {
+    if(scraper && onUpdate) onUpdate({...scraper, name, url, schedule:{enabled:autoScrape, frequency:freq}});
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  if(!scraper) return <div className="px-6 py-8 text-center text-on-surface-variant">Select a scraper from the dashboard.</div>;
+
+  const logs = [
+    { time: '12:04:32', level: 'success', msg: `Scrape completed: ${scraper.stats.totalRecords} records` },
+    { time: '12:04:30', level: 'info', msg: 'Page fetched successfully (200)' },
+    { time: '12:04:28', level: 'info', msg: `Scrape started for ${scraper.url}` },
+    { time: '11:58:12', level: 'info', msg: 'Scraper configuration updated' },
+    { time: '11:45:00', level: 'warning', msg: 'Rate limit approaching (80% threshold)' },
+  ];
+
+  return (
+    <div className="px-6 py-8 lg:p-8 max-w-4xl mx-auto">
+      <div className="flex items-center gap-2 text-sm text-on-surface-variant mb-2">
+        <button onClick={onBack} className="hover:text-primary transition-colors flex items-center gap-1"><Icon name="arrow_back" className="text-lg" /> Scrapers</button>
+        <span>›</span><span className="text-primary">{scraper.name}</span>
+      </div>
+      <h1 className="font-headline text-3xl font-extrabold mb-6 lg:mb-8">Scraper Settings & Logs</h1>
+
+      <div className="flex gap-3 mb-6">
+        <button className="px-5 py-2 rounded-full border border-outline-variant/30 text-on-surface font-bold text-sm hover:bg-surface-container-high transition-colors active:scale-95">Test Run</button>
+        <button onClick={handleSave} className={`px-5 py-2 rounded-full font-bold text-sm transition-all active:scale-95 ${saved ? 'bg-primary/20 text-primary border border-primary/30' : 'gradient-button text-on-primary'}`}>
+          {saved ? '✓ Saved' : 'Save Changes'}
+        </button>
+      </div>
+
+      <div className="flex gap-3 mb-6">
+        <button onClick={() => setActiveTab('config')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab==='config' ? 'bg-primary/10 text-primary' : 'text-on-surface-variant hover:text-on-surface'}`}>Configuration</button>
+        <button onClick={() => setActiveTab('logs')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab==='logs' ? 'bg-primary/10 text-primary' : 'text-on-surface-variant hover:text-on-surface'}`}>Activity Logs</button>
+      </div>
+
+      {activeTab === 'config' ? (
+        <div className="space-y-6">
+          <div className="glass-card p-6 lg:p-8 rounded-xl border border-outline-variant/10">
+            <div className="flex items-center gap-3 mb-6"><Icon name="settings" className="text-primary" /><h3 className="font-headline font-bold text-xl">General Configuration</h3></div>
+            <div className="space-y-4">
+              <div><label className="block text-sm font-medium text-on-surface-variant mb-2">Scraper Name</label>
+              <input value={name} onChange={e => setName(e.target.value)} className="w-full bg-surface-container-lowest ring-1 ring-outline-variant/30 rounded-lg py-3 px-5 text-on-surface focus:ring-primary focus:ring-2 outline-none border-none glow-input" /></div>
+              <div><label className="block text-sm font-medium text-on-surface-variant mb-2">Target Domain</label>
+              <input value={url} onChange={e => setUrl(e.target.value)} className="w-full bg-surface-container-lowest ring-1 ring-outline-variant/30 rounded-lg py-3 px-5 text-on-surface focus:ring-primary focus:ring-2 outline-none border-none glow-input" /></div>
+            </div>
+          </div>
+          <div className="glass-card p-6 lg:p-8 rounded-xl border border-outline-variant/10">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3"><Icon name="autorenew" className="text-primary" /><h3 className="font-headline font-bold text-xl">Auto-Scraping</h3></div>
+              <button onClick={() => setAutoScrape(!autoScrape)} className={`w-12 h-6 rounded-full relative p-1 transition-colors ${autoScrape ? 'bg-primary' : 'bg-outline-variant'}`}>
+                <div className={`absolute top-1 w-4 h-4 rounded-full shadow-sm transition-all ${autoScrape ? 'right-1 bg-on-primary' : 'left-1 bg-surface'}`} />
+              </button>
+            </div>
+            {autoScrape && (
+              <div className="animate-slide-up">
+                <label className="block text-sm font-medium text-on-surface-variant mb-3">Scheduling</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={() => setFreq('hourly')} className={`p-4 rounded-xl text-center font-bold transition-all ${freq==='hourly' ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-surface-container-high border border-outline-variant/10 text-on-surface-variant hover:text-on-surface'}`}>
+                    <Icon name="schedule" className="block mx-auto mb-1" />Hourly
+                  </button>
+                  <button onClick={() => setFreq('daily')} className={`p-4 rounded-xl text-center font-bold transition-all ${freq==='daily' ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-surface-container-high border border-outline-variant/10 text-on-surface-variant hover:text-on-surface'}`}>
+                    <Icon name="calendar_today" className="block mx-auto mb-1" />Daily
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="glass-card rounded-xl border border-outline-variant/10 overflow-hidden">
+          <div className="p-4 lg:p-6 border-b border-outline-variant/10"><h3 className="font-headline font-bold text-lg">Activity Log</h3></div>
+          <div className="divide-y divide-outline-variant/10">
+            {logs.map((log, i) => (
+              <div key={i} className="px-4 lg:px-6 py-3 lg:py-4 flex items-start gap-3 hover:bg-white/[0.02] transition-colors">
+                <Icon name={log.level==='success' ? 'check_circle' : log.level==='warning' ? 'warning' : 'info'} className={`text-sm mt-0.5 ${log.level==='success' ? 'text-primary' : log.level==='warning' ? 'text-error' : 'text-on-surface-variant'}`} />
+                <div className="flex-grow"><p className="text-sm">{log.msg}</p><p className="text-xs text-on-surface-variant mt-0.5">{log.time}</p></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ USER GUIDE ============
+function UserGuide({ onNavigate }) {
+  const guides = [
+    { num: 1, icon: 'rocket_launch', title: 'Deploy Your Cluster', desc: 'Set up your first scraper in minutes. Define your target URL, choose a scraping mode, and let SCRAYPR\'s intelligent engine handle the rest.',
+      steps: ['Enter a target URL and name your scraper', 'Select Fast-Sync or Stealth mode', 'Click Initialize to begin extraction'] },
+    { num: 2, icon: 'schema', title: 'Map the Schema', desc: 'Use CSS selectors to pinpoint exactly what data you need. Our visual selector tool shows live preview of extracted data.',
+      code: '.product-card .price { /* price elements */ }\n[data-testid="title"] { /* attribute selectors */ }' },
+    { num: 3, icon: 'settings_input_component', title: 'Advanced Selectors', desc: 'Go beyond basic CSS with regex patterns, nth-child filters, and attribute matching for precision extraction.',
+      tips: ['Use regex to extract numbers: \\d+\\.?\\d*', 'Chain selectors with > for direct children', 'Use :not() to exclude unwanted elements'] },
+    { num: 4, icon: 'database', title: 'Browse Real-Time Data', desc: 'View extracted data in a marketplace-style browser. Filter, search, and export results instantly.',
+      features: [{icon:'visibility',label:'Live Preview'},{icon:'download',label:'Export CSV'},{icon:'autorenew',label:'Auto-Refresh'}] },
+  ];
+
+  return (
+    <div className="px-6 py-8 lg:p-8 max-w-4xl mx-auto">
+      <section className="mb-12 lg:mb-16">
+        <span className="text-primary font-bold tracking-[0.2em] uppercase text-xs">SCRAYPR Academy</span>
+        <h1 className="text-4xl lg:text-6xl font-headline font-extrabold tracking-tight mt-3 mb-4 lg:mb-6 bg-gradient-to-r from-white to-on-surface-variant bg-clip-text text-transparent">Master the<br/>Extraction</h1>
+        <p className="text-on-surface-variant text-sm lg:text-lg max-w-xl leading-relaxed">Everything you need to deploy, configure, and scale your web scraping operations.</p>
+      </section>
+      <div className="space-y-6 lg:space-y-8 mb-12 lg:mb-16">
+        {guides.map(g => (
+          <div key={g.num} className="glass-card rounded-xl p-6 lg:p-8 border border-outline-variant/10 relative overflow-hidden group hover:border-primary/20 transition-colors">
+            <div className="absolute -right-10 -top-10 w-32 h-32 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-all" />
+            <div className="flex items-start gap-4 lg:gap-6 relative z-10">
+              <div className="flex-shrink-0 w-10 h-10 lg:w-12 lg:h-12 rounded-full bg-primary/20 flex items-center justify-center text-primary font-headline font-bold text-lg">{g.num}</div>
+              <div className="flex-grow">
+                <div className="flex items-center gap-3 mb-3 lg:mb-4"><Icon name={g.icon} className="text-primary text-xl lg:text-2xl" /><h3 className="font-headline font-bold text-xl lg:text-2xl">{g.title}</h3></div>
+                <p className="text-on-surface-variant leading-relaxed mb-4 lg:mb-6 text-sm lg:text-base">{g.desc}</p>
+                {g.steps && <div className="space-y-2">{g.steps.map((s,i) => <div key={i} className="flex items-start gap-3"><div className="w-6 h-6 rounded-full bg-surface-container-highest flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">{i+1}</div><span className="text-on-surface text-sm">{s}</span></div>)}</div>}
+                {g.code && <div className="bg-black/30 rounded-lg p-4 font-mono text-xs lg:text-sm text-primary/80 whitespace-pre-wrap border border-outline-variant/10">{g.code}</div>}
+                {g.tips && <div className="space-y-2">{g.tips.map((t,i) => <div key={i} className="flex items-start gap-2"><Icon name="tips_and_updates" className="text-primary text-sm mt-0.5" /><span className="text-sm text-on-surface-variant font-mono">{t}</span></div>)}</div>}
+                {g.features && <div className="grid grid-cols-3 gap-3">{g.features.map((f,i) => <div key={i} className="bg-surface-container-low/50 rounded-lg p-3 border border-outline-variant/5 text-center"><Icon name={f.icon} className="text-primary mb-1 block mx-auto" /><span className="text-xs font-bold">{f.label}</span></div>)}</div>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="text-center py-8 lg:py-12">
+        <h3 className="font-headline font-bold text-xl lg:text-2xl mb-3">Ready to start extracting?</h3>
+        <p className="text-on-surface-variant mb-6">Create your first scraper and see results in minutes.</p>
+        <button onClick={() => onNavigate('create')} className="inline-flex items-center gap-3 gradient-button text-on-primary px-8 lg:px-10 py-3 lg:py-4 rounded-full font-headline font-bold shadow-[0_0_30px_rgba(97,205,255,0.3)] hover:shadow-[0_0_45px_rgba(97,205,255,0.5)] transition-all active:scale-95">
+          <Icon name="add" /> Create Your First Scraper
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============ RENDER ============
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-deploy
+dist2
+dist3
+build-output
+.netlify
+*.local
+.DS_Store
+*.zip
+vite.config.js.timestamp-*
