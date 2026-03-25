@@ -60,7 +60,11 @@ async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeoutMs =
 // ============ REQUEST HANDLER ============
 export default async (req: Request, context: Context) => {
   const url = new URL(req.url);
-  const path = url.pathname.replace(/^\/api/, "").replace(/\/$/, "") || "/";
+  // Handle both direct /.netlify/functions/api/* and proxied /api/* paths
+  const path = url.pathname
+    .replace(/^\/.netlify\/functions\/api/, "")
+    .replace(/^\/api/, "")
+    .replace(/\/$/, "") || "/";
   const method = req.method;
 
   // JSON response helper
