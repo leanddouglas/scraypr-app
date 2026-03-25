@@ -1,23 +1,101 @@
 import type { Context, Config } from "@netlify/functions";
+import { getStore } from "@netlify/blobs";
 import * as cheerio from "cheerio";
 
-// ============ IN-MEMORY STORE ============
-const scrapers = new Map<string, any>();
-const scrapeResults = new Map<string, any[]>();
-const scrapeLogs = new Map<string, any[]>();
-
-function uuid() {
-  return crypto.randomUUID();
+// ============ BLOB STORE HELPERS ============
+async function getScrapersStore() {
+  return getStore("scrapers");
+}
+async function getResultsStore() {
+  return getStore("results");
+}
+async function getLogsStore() {
+  return getStore("logs");
 }
 
-function addLog(scraperId: string, level: string, message: string) {
-  if (!scrapeLogs.has(scraperId)) scrapeLogs.set(scraperId, []);
-  scrapeLogs.get(scraperId)!.push({
-    id: uuid(),
+async function getAllScrapers(): Promise<any[]> {
+  const store = await getScrapersStore();
+  const { blobs } = await store.list();
+  const scrapers: any[] = [];
+  for (const blob of blobs) {
+    try {
+      const data = await store.get(blob.key, { type: "json" });
+      if (data) scrapers.push(data);
+    } catch {}
+  }
+  return scrapers;
+}
+
+async function getScraper(id: string): Promise<any | null> {
+  const store = await getScrapersStore();
+  try {
+    return await store.get(id, { type: "json" });
+  } catch {
+    return null;
+  }
+}
+
+async function saveScraper(scraper: any): Promise<void> {
+  const store = await getScrapersStore();
+  await store.setJSON(scraper.id, scraper);
+}
+
+async function deleteScraper(id: string): Promise<void> {
+  const store = await getScrapersStore();
+  await store.delete(id);
+}
+
+async function getResults(scraperId: string): Promise<any[]> {
+  const store = await getResultsStore();
+  try {
+    const data = await store.get(scraperId, { type: "json" });
+    return data || [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveResults(scraperId: string, results: any[]): Promise<void> {
+  const store = await getResultsStore();
+  await store.setJSON(scraperId, results);
+}
+
+async function deleteResults(scraperId: string): Promise<void> {
+  const store = await getResultsStore();
+  await store.delete(scraperId);
+}
+
+async function getLogs(scraperId: string): Promise<any[]> {
+  const store = await getLogsStore();
+  try {
+    const data = await store.get(scraperId, { type: "json" });
+    return data || [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveLogs(scraperId: string, logs: any[]): Promise<void> {
+  const store = await getLogsStore();
+  await store.setJSON(scraperId, logs);
+}
+
+async function deleteLogs(scraperId: string): Promise<void> {
+  const store = await getLogsStore();
+  await store.delete(scraperId);
+}
+
+async function addLog(scraperId: string, level: string, message: string) {
+  const logs = await getLogs(scraperId);
+  logs.push({
+    id: crypto.randomUUID(),
     timestamp: new Date().toISOString(),
     level,
     message,
   });
+  // Keep last 100 logs per scraper
+  const trimmed = logs.slice(-100);
+  await saveLogs(scraperId, trimmed);
 }
 
 // ============ VALIDATION HELPERS ============
@@ -45,8 +123,8 @@ function isValidSelector(sel: string): boolean {
   }
 }
 
-// Fetch with timeout (30s default)
-async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeoutMs = 30000): Promise<Response> {
+// Fetch with timeout (25s default — Netlify functions have 26s limit)
+async function fetchWithTimeout(url: string, opts: RequestInit = {}, timeoutMs = 25000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -89,32 +167,32 @@ export default async (req: Request, context: Context) => {
 
     // GET /api/stats
     if (method === "GET" && path === "/stats") {
-      let totalRecords = 0, totalRuns = 0, activeCount = 0, successRateSum = 0, scraperCount = 0;
+      const scrapers = await getAllScrapers();
+      let totalRecords = 0, totalRuns = 0, activeCount = 0, successRateSum = 0;
       scrapers.forEach((s) => {
-        totalRecords += s.stats.totalRecords;
-        totalRuns += s.stats.runsCount;
+        totalRecords += s.stats?.totalRecords || 0;
+        totalRuns += s.stats?.runsCount || 0;
         if (s.status === "running") activeCount++;
-        successRateSum += s.stats.successRate;
-        scraperCount++;
+        successRateSum += s.stats?.successRate || 100;
       });
       return json({
-        totalRecords, totalRuns, activeScrapers: activeCount, totalScrapers: scraperCount,
-        avgSuccessRate: scraperCount > 0 ? (successRateSum / scraperCount).toFixed(1) : "100",
+        totalRecords, totalRuns, activeScrapers: activeCount, totalScrapers: scrapers.length,
+        avgSuccessRate: scrapers.length > 0 ? (successRateSum / scrapers.length).toFixed(1) : "100",
         velocity: totalRecords > 0 ? Math.round(totalRecords / Math.max(totalRuns, 1)) : 0,
       });
     }
 
     // GET /api/scrapers
     if (method === "GET" && path === "/scrapers") {
-      const list = Array.from(scrapers.values()).sort(
+      const scrapers = await getAllScrapers();
+      const sorted = scrapers.sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
-      return json(list);
+      return json(sorted);
     }
 
     // POST /api/scrapers — with validation
     if (method === "POST" && path === "/scrapers") {
-      // Validate required fields
       if (!body || !body.url) {
         return json({ error: "URL is required" }, 400);
       }
@@ -127,10 +205,8 @@ export default async (req: Request, context: Context) => {
       if (body.name.length > 200) {
         return json({ error: "Scraper name must be under 200 characters" }, 400);
       }
-      // Validate mode
       const validModes = ["fast-sync", "stealth", "deep-crawl"];
       const mode = validModes.includes(body.mode) ? body.mode : "fast-sync";
-      // Validate fields
       const fields = Array.isArray(body.fields) ? body.fields.map((f: any) => ({
         name: sanitize(String(f.name || "")).substring(0, 100),
         selector: String(f.selector || "").substring(0, 500),
@@ -138,7 +214,7 @@ export default async (req: Request, context: Context) => {
         icon: String(f.icon || "code").substring(0, 30),
       })).filter((f: any) => f.name && f.selector) : [];
 
-      const id = uuid();
+      const id = crypto.randomUUID();
       const scraper = {
         id,
         name: sanitize(body.name).substring(0, 200),
@@ -151,8 +227,8 @@ export default async (req: Request, context: Context) => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      scrapers.set(id, scraper);
-      addLog(id, "info", `Scraper "${scraper.name}" created`);
+      await saveScraper(scraper);
+      await addLog(id, "info", `Scraper "${scraper.name}" created`);
       return json(scraper, 201);
     }
 
@@ -192,7 +268,7 @@ export default async (req: Request, context: Context) => {
         return json({ matchCount: $(body.selector).length, preview: matches });
       } catch (e: any) {
         if (e.name === "AbortError") {
-          return json({ error: "Request timed out after 30 seconds" }, 504);
+          return json({ error: "Request timed out after 25 seconds" }, 504);
         }
         return json({ error: `Failed to fetch target: ${e.message}` }, 502);
       }
@@ -206,16 +282,15 @@ export default async (req: Request, context: Context) => {
 
       // GET /api/scrapers/:id
       if (method === "GET" && !subPath) {
-        const s = scrapers.get(id);
+        const s = await getScraper(id);
         if (!s) return json({ error: "Scraper not found" }, 404);
         return json(s);
       }
 
       // PUT /api/scrapers/:id — with validation
       if (method === "PUT" && !subPath) {
-        const s = scrapers.get(id);
+        const s = await getScraper(id);
         if (!s) return json({ error: "Scraper not found" }, 404);
-        // Only allow safe fields to be updated
         if (body.name) s.name = sanitize(String(body.name)).substring(0, 200);
         if (body.url) {
           if (!isValidUrl(body.url)) return json({ error: "Invalid URL" }, 400);
@@ -224,29 +299,31 @@ export default async (req: Request, context: Context) => {
         if (body.schedule) s.schedule = body.schedule;
         if (body.fields && Array.isArray(body.fields)) s.fields = body.fields;
         s.updatedAt = new Date().toISOString();
-        scrapers.set(id, s);
-        addLog(id, "info", "Scraper configuration updated");
+        await saveScraper(s);
+        await addLog(id, "info", "Scraper configuration updated");
         return json(s);
       }
 
       // DELETE /api/scrapers/:id
       if (method === "DELETE" && !subPath) {
-        if (!scrapers.has(id)) return json({ error: "Scraper not found" }, 404);
-        scrapers.delete(id);
-        scrapeResults.delete(id);
-        scrapeLogs.delete(id);
+        const s = await getScraper(id);
+        if (!s) return json({ error: "Scraper not found" }, 404);
+        await deleteScraper(id);
+        await deleteResults(id);
+        await deleteLogs(id);
         return json({ success: true });
       }
 
       // POST /api/scrapers/:id/run — with timeout & validation
       if (method === "POST" && subPath === "/run") {
-        const s = scrapers.get(id);
+        const s = await getScraper(id);
         if (!s) return json({ error: "Scraper not found" }, 404);
         if (!s.url || !isValidUrl(s.url)) {
           return json({ error: "Scraper has no valid URL configured" }, 400);
         }
         s.status = "running";
-        addLog(s.id, "info", `Scrape started for ${s.url}`);
+        await saveScraper(s);
+        await addLog(s.id, "info", `Scrape started for ${s.url}`);
         try {
           const startTime = Date.now();
           const response = await fetchWithTimeout(s.url, {
@@ -256,12 +333,13 @@ export default async (req: Request, context: Context) => {
             },
           });
           if (!response.ok) {
-            addLog(s.id, "error", `Target returned ${response.status}`);
+            await addLog(s.id, "error", `Target returned ${response.status}`);
             s.status = "error";
+            await saveScraper(s);
             return json({ error: `Target site returned ${response.status} ${response.statusText}` }, 502);
           }
           const html = await response.text();
-          addLog(s.id, "info", `Page fetched successfully (${response.status}, ${(html.length / 1024).toFixed(0)}KB)`);
+          await addLog(s.id, "info", `Page fetched successfully (${response.status}, ${(html.length / 1024).toFixed(0)}KB)`);
           const $ = cheerio.load(html);
           const results: any[] = [];
           if (s.fields && s.fields.length > 0) {
@@ -270,11 +348,12 @@ export default async (req: Request, context: Context) => {
             try {
               matches = $(firstField.selector);
             } catch {
-              addLog(s.id, "error", `Invalid selector: "${firstField.selector}"`);
+              await addLog(s.id, "error", `Invalid selector: "${firstField.selector}"`);
               s.status = "error";
+              await saveScraper(s);
               return json({ error: `Invalid CSS selector: "${firstField.selector}"` }, 400);
             }
-            addLog(s.id, "info", `Found ${matches.length} matches for "${firstField.name}"`);
+            await addLog(s.id, "info", `Found ${matches.length} matches for "${firstField.name}"`);
             matches.each((i: number, el: any) => {
               const record: any = { _index: i };
               s.fields.forEach((field: any) => {
@@ -292,7 +371,6 @@ export default async (req: Request, context: Context) => {
               results.push(record);
             });
           } else {
-            // Auto-extract when no fields configured
             const links: any[] = [];
             $("a[href]").each((i: number, el: any) => {
               if (i < 50) {
@@ -309,40 +387,45 @@ export default async (req: Request, context: Context) => {
             });
           }
           const duration = Date.now() - startTime;
-          if (!scrapeResults.has(s.id)) scrapeResults.set(s.id, []);
-          const runResult = { id: uuid(), scraperId: s.id, timestamp: new Date().toISOString(), recordCount: results.length, duration, data: results };
-          scrapeResults.get(s.id)!.unshift(runResult);
-          // Keep only the last 20 runs per scraper
-          const allRuns = scrapeResults.get(s.id)!;
-          if (allRuns.length > 20) scrapeResults.set(s.id, allRuns.slice(0, 20));
+          const existingResults = await getResults(s.id);
+          const runResult = { id: crypto.randomUUID(), scraperId: s.id, timestamp: new Date().toISOString(), recordCount: results.length, duration, data: results };
+          existingResults.unshift(runResult);
+          // Keep only the last 20 runs
+          await saveResults(s.id, existingResults.slice(0, 20));
           s.stats.totalRecords += results.length;
           s.stats.lastRun = new Date().toISOString();
           s.stats.runsCount += 1;
           s.status = "idle";
           s.updatedAt = new Date().toISOString();
-          addLog(s.id, "success", `Scrape completed: ${results.length} records in ${duration}ms`);
+          await saveScraper(s);
+          await addLog(s.id, "success", `Scrape completed: ${results.length} records in ${duration}ms`);
           return json({ success: true, recordCount: results.length, duration, runId: runResult.id });
         } catch (e: any) {
           s.status = "error";
+          await saveScraper(s);
           if (e.name === "AbortError") {
-            addLog(s.id, "error", "Scrape timed out after 30 seconds");
-            return json({ error: "Scrape timed out after 30 seconds" }, 504);
+            await addLog(s.id, "error", "Scrape timed out after 25 seconds");
+            return json({ error: "Scrape timed out after 25 seconds" }, 504);
           }
-          addLog(s.id, "error", `Scrape failed: ${e.message}`);
+          await addLog(s.id, "error", `Scrape failed: ${e.message}`);
           return json({ error: e.message }, 500);
         }
       }
 
       // GET /api/scrapers/:id/results
       if (method === "GET" && subPath === "/results") {
-        if (!scrapers.has(id)) return json({ error: "Scraper not found" }, 404);
-        return json(scrapeResults.get(id) || []);
+        const s = await getScraper(id);
+        if (!s) return json({ error: "Scraper not found" }, 404);
+        const results = await getResults(id);
+        return json(results);
       }
 
       // GET /api/scrapers/:id/logs
       if (method === "GET" && subPath === "/logs") {
-        if (!scrapers.has(id)) return json({ error: "Scraper not found" }, 404);
-        return json((scrapeLogs.get(id) || []).slice().reverse());
+        const s = await getScraper(id);
+        if (!s) return json({ error: "Scraper not found" }, 404);
+        const logs = await getLogs(id);
+        return json(logs.slice().reverse());
       }
     }
 
