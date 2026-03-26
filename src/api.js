@@ -6,7 +6,6 @@ async function fetchJSON(url, opts = {}) {
     ...opts,
   });
   if (!res.ok) {
-    // Safely handle non-JSON error responses (e.g., HTML error pages)
     let errMsg = res.statusText || 'Request failed';
     try {
       const contentType = res.headers.get('content-type') || '';
@@ -14,31 +13,23 @@ async function fetchJSON(url, opts = {}) {
         const err = await res.json();
         errMsg = err.error || errMsg;
       }
-    } catch {
-      // Ignore JSON parse errors
-    }
+    } catch {}
     throw new Error(errMsg);
   }
   return res.json();
 }
 
 export const api = {
-  // Scrapers
-  getScrapers: () => fetchJSON('/scrapers'),
-  getScraper: (id) => fetchJSON(`/scrapers/${id}`),
-  createScraper: (data) => fetchJSON('/scrapers', { method: 'POST', body: JSON.stringify(data) }),
-  updateScraper: (id, data) => fetchJSON(`/scrapers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteScraper: (id) => fetchJSON(`/scrapers/${id}`, { method: 'DELETE' }),
+  // Search
+  search: (query, marketplaces, location) =>
+    fetchJSON('/search', { method: 'POST', body: JSON.stringify({ query, marketplaces, location }) }),
+  getSearchResults: (id) => fetchJSON(`/search/${id}`),
 
-  // Scraping
-  runScrape: (id) => fetchJSON(`/scrapers/${id}/run`, { method: 'POST' }),
-  getResults: (id) => fetchJSON(`/scrapers/${id}/results`),
-  getLogs: (id) => fetchJSON(`/scrapers/${id}/logs`),
+  // Saved searches
+  getSavedSearches: () => fetchJSON('/saved-searches'),
+  createSavedSearch: (data) => fetchJSON('/saved-searches', { method: 'POST', body: JSON.stringify(data) }),
+  deleteSavedSearch: (id) => fetchJSON(`/saved-searches/${id}`, { method: 'DELETE' }),
 
-  // Preview
-  previewSelector: (url, selector) =>
-    fetchJSON('/preview-selector', { method: 'POST', body: JSON.stringify({ url, selector }) }),
-
-  // Stats
-  getStats: () => fetchJSON('/stats'),
+  // Marketplaces
+  getMarketplaces: () => fetchJSON('/marketplaces'),
 };
