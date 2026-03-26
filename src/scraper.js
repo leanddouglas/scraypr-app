@@ -288,121 +288,64 @@ function scrapeKijiji(html, location) {
 }
 
 // ============ FACEBOOK MARKETPLACE ============
-function buildFacebookUrl(query, location) {
-  // Facebook Marketplace search URL — works without login for basic listing data
-  return `https://www.facebook.com/marketplace/search/?query=${encodeURIComponent(query)}&exact=false`;
+// Facebook requires authentication — we use a redirect approach:
+// Opens FB Marketplace search in a new tab where the user is already logged in.
+// We return a single "redirect" deal card that links directly to the search.
+
+function buildFacebookSearchUrl(query, location) {
+  // Facebook Marketplace city IDs for major cities
+  const FB_CITIES = {
+    vancouver: "vancouver",
+    toronto: "toronto",
+    montreal: "montreal",
+    calgary: "calgary",
+    edmonton: "edmonton",
+    ottawa: "ottawa",
+    "los angeles": "los-angeles",
+    "new york": "new-york",
+    "san francisco": "san-francisco",
+    seattle: "seattle",
+    portland: "portland",
+    chicago: "chicago",
+    houston: "houston",
+    phoenix: "phoenix",
+    denver: "denver",
+    miami: "miami",
+    atlanta: "atlanta",
+    boston: "boston",
+    dallas: "dallas",
+    detroit: "detroit",
+  };
+  const city = FB_CITIES[location?.toLowerCase()] || "";
+  const base = city
+    ? `https://www.facebook.com/marketplace/${city}/search`
+    : `https://www.facebook.com/marketplace/search`;
+  return `${base}/?query=${encodeURIComponent(query)}&exact=false`;
 }
 
-function scrapeFacebook(html, location) {
-  const doc = parseHTML(html);
-  const deals = [];
+function getFacebookDeals(query, location) {
+  const searchUrl = buildFacebookSearchUrl(query, location);
 
-  // Facebook uses heavily obfuscated class names, so we use multiple strategies
-
-  // Strategy 1: Look for structured data / JSON-LD
-  const scripts = doc.querySelectorAll("script[type='application/ld+json']");
-  scripts.forEach((script) => {
-    try {
-      const data = JSON.parse(script.textContent);
-      const items = Array.isArray(data) ? data : data?.itemListElement || [data];
-      items.forEach((item, i) => {
-        if (i >= 30) return;
-        const title = item.name || item.headline || "";
-        const priceObj = item.offers?.price || item.price || "";
-        const price = priceObj ? parseFloat(String(priceObj).replace(/[^0-9.]/g, "")) || null : null;
-        const priceText = price ? `$${price}` : "See listing";
-        const url = item.url || item["@id"] || "https://www.facebook.com/marketplace";
-        const img = item.image?.url || item.image || null;
-
-        if (title) {
-          deals.push({
-            id: `fb-${deals.length}-${Date.now()}`,
-            title,
-            price,
-            priceText,
-            image: typeof img === "string" ? img : null,
-            url: typeof url === "string" && url.startsWith("http") ? url : "https://www.facebook.com/marketplace",
-            marketplace: "facebook",
-            location: location || "Local",
-            postedAt: new Date().toISOString(),
-          });
-        }
-      });
-    } catch { /* skip invalid JSON */ }
-  });
-
-  if (deals.length > 0) return deals;
-
-  // Strategy 2: Look for marketplace-specific patterns in meta tags
-  const metaOg = doc.querySelectorAll("meta[property^='og:']");
-  const ogData = {};
-  metaOg.forEach((m) => { ogData[m.getAttribute("property")] = m.getAttribute("content"); });
-
-  // Strategy 3: Parse any visible listing-like elements
-  const allLinks = doc.querySelectorAll("a[href*='/marketplace/item/']");
-  const seen = new Set();
-  allLinks.forEach((a, i) => {
-    if (i >= 40) return;
-    const href = a.getAttribute("href") || "";
-    if (seen.has(href)) return;
-    seen.add(href);
-
-    // Walk the element and its children for text
-    const texts = [];
-    a.querySelectorAll("span, div").forEach((el) => {
-      const t = el.textContent?.trim();
-      if (t && t.length > 2 && t.length < 200) texts.push(t);
-    });
-
-    // First long text is usually the title, first $ text is price
-    const title = texts.find((t) => t.length > 5 && !t.startsWith("$")) || a.textContent?.trim()?.substring(0, 100) || "";
-    const priceStr = texts.find((t) => t.includes("$")) || "";
-    const price = priceStr ? parseFloat(priceStr.replace(/[^0-9.]/g, "")) || null : null;
-
-    if (title && title.length > 3) {
-      deals.push({
-        id: `fb-${deals.length}-${Date.now()}`,
-        title,
-        price,
-        priceText: priceStr || "See listing",
-        image: null,
-        url: href.startsWith("http") ? href : `https://www.facebook.com${href}`,
-        marketplace: "facebook",
-        location: location || "Local",
-        postedAt: new Date().toISOString(),
-      });
-    }
-  });
-
-  // Strategy 4: Try to find any price + title patterns in generic divs
-  if (deals.length === 0) {
-    const priceEls = doc.querySelectorAll("[class*='price'], [data-testid*='price']");
-    priceEls.forEach((pel, i) => {
-      if (i >= 30) return;
-      const parent = pel.closest("a") || pel.parentElement?.closest("a") || pel.parentElement;
-      if (!parent) return;
-      const priceText = pel.textContent?.trim() || "";
-      const price = priceText ? parseFloat(priceText.replace(/[^0-9.]/g, "")) || null : null;
-      const titleEl = parent.querySelector("span:not([class*='price'])") || parent;
-      const title = titleEl?.textContent?.trim()?.replace(priceText, "").trim().substring(0, 100) || "";
-
-      if (title && title.length > 3) {
-        deals.push({
-          id: `fb-${deals.length}-${Date.now()}`,
-          title,
-          price,
-          priceText: priceText || "See listing",
-          image: null,
-          url: "https://www.facebook.com/marketplace",
-          marketplace: "facebook",
-          location: location || "Local",
-          postedAt: new Date().toISOString(),
-        });
-      }
-    });
+  // Auto-open Facebook Marketplace in a new tab so the user sees real results
+  if (typeof window !== "undefined") {
+    window.open(searchUrl, "_blank", "noopener,noreferrer");
   }
 
-  return deals;
+  // Return a single card that links to the search — acts as a portal
+  return [
+    {
+      id: `fb-redirect-${Date.now()}`,
+      title: `🔗 View "${query}" on Facebook Marketplace`,
+      price: null,
+      priceText: "View on Facebook",
+      image: null,
+      url: searchUrl,
+      marketplace: "facebook",
+      location: location || "Local",
+      postedAt: new Date().toISOString(),
+      isRedirect: true,
+    },
+  ];
 }
 
 // ============ SEARCH ORCHESTRATOR ============
@@ -453,11 +396,12 @@ export async function searchMarketplaces(query, marketplaces, location) {
     );
   }
   if (marketplaces.includes("facebook")) {
-    tasks.push(
-      fetchWithProxy(buildFacebookUrl(query, location))
-        .then((html) => { allDeals.push(...scrapeFacebook(html, location)); })
-        .catch((e) => { errors.push(`FB Marketplace: ${e.message}`); })
-    );
+    // Facebook requires login — redirect to FB Marketplace search in a new tab
+    try {
+      allDeals.push(...getFacebookDeals(query, location));
+    } catch (e) {
+      errors.push(`FB Marketplace: ${e.message}`);
+    }
   }
 
   await Promise.all(tasks);

@@ -7,20 +7,34 @@ function DealCard({ deal }) {
     craigslist: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
     autotrader: 'bg-green-500/20 text-green-400 border-green-500/30',
     ebay: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    kijiji: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    facebook: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   };
-  const marketplaceIcons = { craigslist: '🏷️', autotrader: '🚗', ebay: '🛒' };
+  const marketplaceIcons = { craigslist: '🏷️', autotrader: '🚗', ebay: '🛒', kijiji: '🟢', facebook: '📘' };
+
+  // Special styling for Facebook redirect card
+  const isRedirect = deal.isRedirect;
 
   return (
     <a
       href={deal.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="glass-card border border-outline-variant/10 rounded-xl p-4 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all group block"
+      className={`glass-card border rounded-xl p-4 hover:shadow-lg transition-all group block ${
+        isRedirect
+          ? 'border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-blue-600/5 hover:border-blue-400/50 hover:shadow-blue-500/10'
+          : 'border-outline-variant/10 hover:border-primary/30 hover:shadow-primary/5'
+      }`}
     >
       {/* Image placeholder or actual image */}
       {deal.image ? (
         <div className="w-full h-36 rounded-lg mb-3 overflow-hidden bg-on-surface/5">
           <img src={deal.image} alt={deal.title} className="w-full h-full object-cover" loading="lazy" />
+        </div>
+      ) : isRedirect ? (
+        <div className="w-full h-24 rounded-lg mb-3 bg-gradient-to-br from-blue-500/20 to-blue-600/10 flex flex-col items-center justify-center gap-1">
+          <span className="text-4xl">📘</span>
+          <span className="text-blue-400 text-[10px] font-bold uppercase tracking-wider">Opens in new tab</span>
         </div>
       ) : (
         <div className="w-full h-20 rounded-lg mb-3 bg-gradient-to-br from-primary/5 to-primary-container/5 flex items-center justify-center">
