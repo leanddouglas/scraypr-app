@@ -18,8 +18,8 @@ const MARKETPLACES = [
   { id: 'craigslist', name: 'Craigslist', icon: '🏷️', active: true },
   { id: 'ebay', name: 'eBay', icon: '🛒', active: true },
   { id: 'autotrader', name: 'AutoTrader', icon: '🚗', active: true },
-  { id: 'facebook', name: 'FB Marketplace', icon: '📘', active: false },
-  { id: 'kijiji', name: 'Kijiji', icon: '🟢', active: false },
+  { id: 'facebook', name: 'FB Marketplace', icon: '📘', active: true },
+  { id: 'kijiji', name: 'Kijiji', icon: '🟢', active: true },
 ];
 
 export default function Home() {

@@ -174,6 +174,237 @@ function scrapeAutoTrader(html, location) {
   return deals;
 }
 
+// ============ KIJIJI ============
+const KIJIJI_LOCATIONS = {
+  vancouver: "b-buy-sell/vancouver/",
+  toronto: "b-buy-sell/city-of-toronto/",
+  montreal: "b-buy-sell/ville-de-montreal/",
+  calgary: "b-buy-sell/calgary/",
+  edmonton: "b-buy-sell/edmonton/",
+  ottawa: "b-buy-sell/ottawa/",
+  winnipeg: "b-buy-sell/winnipeg/",
+  hamilton: "b-buy-sell/hamilton/",
+  kitchener: "b-buy-sell/kitchener-waterloo/",
+  london: "b-buy-sell/london/",
+  victoria: "b-buy-sell/victoria-bc/",
+  halifax: "b-buy-sell/city-of-halifax/",
+  saskatoon: "b-buy-sell/saskatoon/",
+  regina: "b-buy-sell/regina/",
+  "st. john's": "b-buy-sell/st-johns/",
+};
+
+function buildKijijiUrl(query, location) {
+  const path = KIJIJI_LOCATIONS[location.toLowerCase()] || "b-buy-sell/vancouver/";
+  return `https://www.kijiji.ca/${path}k0?dc=true&dFree498=2&srt=2&kwd=${encodeURIComponent(query)}`;
+}
+
+function scrapeKijiji(html, location) {
+  const doc = parseHTML(html);
+  const deals = [];
+
+  // Try multiple selector patterns — Kijiji changes their HTML frequently
+  const selectors = [
+    "[data-testid='listing-card']",
+    ".search-item",
+    "[data-listing-id]",
+    ".resultContainer",
+    ".info-container",
+    "[class*='ListItem']",
+    "[class*='listing']",
+  ];
+
+  let items = [];
+  for (const sel of selectors) {
+    items = doc.querySelectorAll(sel);
+    if (items.length > 0) break;
+  }
+
+  // Fallback: scan all anchors that link to /v-* (Kijiji listing pattern)
+  if (items.length === 0) {
+    const allLinks = doc.querySelectorAll("a[href*='/v-']");
+    const seen = new Set();
+    allLinks.forEach((a, i) => {
+      if (i >= 40) return;
+      const href = a.getAttribute("href") || "";
+      if (seen.has(href)) return;
+      seen.add(href);
+      const title = a.textContent?.trim() || a.getAttribute("aria-label") || "";
+      if (title && title.length > 5 && title.length < 200) {
+        deals.push({
+          id: `kj-${deals.length}-${Date.now()}`,
+          title,
+          price: null,
+          priceText: "See listing",
+          image: null,
+          url: href.startsWith("http") ? href : `https://www.kijiji.ca${href}`,
+          marketplace: "kijiji",
+          location: location || "Vancouver",
+          postedAt: new Date().toISOString(),
+        });
+      }
+    });
+    return deals;
+  }
+
+  items.forEach((el, i) => {
+    if (i >= 40) return;
+    // Try various title selectors
+    const titleEl = el.querySelector(
+      "[data-testid='listing-title'], .title, .info-container .title, a.title, [class*='title'], h3, h2"
+    );
+    const title = titleEl?.textContent?.trim() || "";
+
+    // Try various price selectors
+    const priceEl = el.querySelector(
+      "[data-testid='listing-price'], .price, [class*='price'], [class*='Price']"
+    );
+    const priceText = priceEl?.textContent?.trim() || "";
+    const price = priceText ? parseFloat(priceText.replace(/[^0-9.]/g, "")) || null : null;
+
+    // Link
+    const linkEl = el.querySelector("a[href*='/v-']") || el.closest("a") || el.querySelector("a");
+    const href = linkEl?.getAttribute("href") || "";
+
+    // Image
+    const img = el.querySelector("img")?.getAttribute("src") ||
+      el.querySelector("img")?.getAttribute("data-src") || null;
+
+    if (title && title.length > 3) {
+      deals.push({
+        id: `kj-${i}-${Date.now()}`,
+        title,
+        price,
+        priceText: priceText || "See listing",
+        image: img,
+        url: href.startsWith("http") ? href : `https://www.kijiji.ca${href}`,
+        marketplace: "kijiji",
+        location: location || "Vancouver",
+        postedAt: new Date().toISOString(),
+      });
+    }
+  });
+
+  return deals;
+}
+
+// ============ FACEBOOK MARKETPLACE ============
+function buildFacebookUrl(query, location) {
+  // Facebook Marketplace search URL — works without login for basic listing data
+  return `https://www.facebook.com/marketplace/search/?query=${encodeURIComponent(query)}&exact=false`;
+}
+
+function scrapeFacebook(html, location) {
+  const doc = parseHTML(html);
+  const deals = [];
+
+  // Facebook uses heavily obfuscated class names, so we use multiple strategies
+
+  // Strategy 1: Look for structured data / JSON-LD
+  const scripts = doc.querySelectorAll("script[type='application/ld+json']");
+  scripts.forEach((script) => {
+    try {
+      const data = JSON.parse(script.textContent);
+      const items = Array.isArray(data) ? data : data?.itemListElement || [data];
+      items.forEach((item, i) => {
+        if (i >= 30) return;
+        const title = item.name || item.headline || "";
+        const priceObj = item.offers?.price || item.price || "";
+        const price = priceObj ? parseFloat(String(priceObj).replace(/[^0-9.]/g, "")) || null : null;
+        const priceText = price ? `$${price}` : "See listing";
+        const url = item.url || item["@id"] || "https://www.facebook.com/marketplace";
+        const img = item.image?.url || item.image || null;
+
+        if (title) {
+          deals.push({
+            id: `fb-${deals.length}-${Date.now()}`,
+            title,
+            price,
+            priceText,
+            image: typeof img === "string" ? img : null,
+            url: typeof url === "string" && url.startsWith("http") ? url : "https://www.facebook.com/marketplace",
+            marketplace: "facebook",
+            location: location || "Local",
+            postedAt: new Date().toISOString(),
+          });
+        }
+      });
+    } catch { /* skip invalid JSON */ }
+  });
+
+  if (deals.length > 0) return deals;
+
+  // Strategy 2: Look for marketplace-specific patterns in meta tags
+  const metaOg = doc.querySelectorAll("meta[property^='og:']");
+  const ogData = {};
+  metaOg.forEach((m) => { ogData[m.getAttribute("property")] = m.getAttribute("content"); });
+
+  // Strategy 3: Parse any visible listing-like elements
+  const allLinks = doc.querySelectorAll("a[href*='/marketplace/item/']");
+  const seen = new Set();
+  allLinks.forEach((a, i) => {
+    if (i >= 40) return;
+    const href = a.getAttribute("href") || "";
+    if (seen.has(href)) return;
+    seen.add(href);
+
+    // Walk the element and its children for text
+    const texts = [];
+    a.querySelectorAll("span, div").forEach((el) => {
+      const t = el.textContent?.trim();
+      if (t && t.length > 2 && t.length < 200) texts.push(t);
+    });
+
+    // First long text is usually the title, first $ text is price
+    const title = texts.find((t) => t.length > 5 && !t.startsWith("$")) || a.textContent?.trim()?.substring(0, 100) || "";
+    const priceStr = texts.find((t) => t.includes("$")) || "";
+    const price = priceStr ? parseFloat(priceStr.replace(/[^0-9.]/g, "")) || null : null;
+
+    if (title && title.length > 3) {
+      deals.push({
+        id: `fb-${deals.length}-${Date.now()}`,
+        title,
+        price,
+        priceText: priceStr || "See listing",
+        image: null,
+        url: href.startsWith("http") ? href : `https://www.facebook.com${href}`,
+        marketplace: "facebook",
+        location: location || "Local",
+        postedAt: new Date().toISOString(),
+      });
+    }
+  });
+
+  // Strategy 4: Try to find any price + title patterns in generic divs
+  if (deals.length === 0) {
+    const priceEls = doc.querySelectorAll("[class*='price'], [data-testid*='price']");
+    priceEls.forEach((pel, i) => {
+      if (i >= 30) return;
+      const parent = pel.closest("a") || pel.parentElement?.closest("a") || pel.parentElement;
+      if (!parent) return;
+      const priceText = pel.textContent?.trim() || "";
+      const price = priceText ? parseFloat(priceText.replace(/[^0-9.]/g, "")) || null : null;
+      const titleEl = parent.querySelector("span:not([class*='price'])") || parent;
+      const title = titleEl?.textContent?.trim()?.replace(priceText, "").trim().substring(0, 100) || "";
+
+      if (title && title.length > 3) {
+        deals.push({
+          id: `fb-${deals.length}-${Date.now()}`,
+          title,
+          price,
+          priceText: priceText || "See listing",
+          image: null,
+          url: "https://www.facebook.com/marketplace",
+          marketplace: "facebook",
+          location: location || "Local",
+          postedAt: new Date().toISOString(),
+        });
+      }
+    });
+  }
+
+  return deals;
+}
+
 // ============ SEARCH ORCHESTRATOR ============
 function computeStats(deals) {
   const priced = deals.filter((d) => d.price !== null && d.price > 0);
@@ -212,6 +443,20 @@ export async function searchMarketplaces(query, marketplaces, location) {
       fetchWithProxy(buildEbayUrl(query))
         .then((html) => { allDeals.push(...scrapeEbay(html)); })
         .catch((e) => { errors.push(`eBay: ${e.message}`); })
+    );
+  }
+  if (marketplaces.includes("kijiji")) {
+    tasks.push(
+      fetchWithProxy(buildKijijiUrl(query, location))
+        .then((html) => { allDeals.push(...scrapeKijiji(html, location)); })
+        .catch((e) => { errors.push(`Kijiji: ${e.message}`); })
+    );
+  }
+  if (marketplaces.includes("facebook")) {
+    tasks.push(
+      fetchWithProxy(buildFacebookUrl(query, location))
+        .then((html) => { allDeals.push(...scrapeFacebook(html, location)); })
+        .catch((e) => { errors.push(`FB Marketplace: ${e.message}`); })
     );
   }
 

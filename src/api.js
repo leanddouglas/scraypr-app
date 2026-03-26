@@ -20,7 +20,7 @@ export const api = {
       { id: "craigslist", name: "Craigslist", icon: "🏷️", status: "active" },
       { id: "autotrader", name: "AutoTrader", icon: "🚗", status: "active" },
       { id: "ebay", name: "eBay", icon: "🛒", status: "active" },
-      { id: "facebook", name: "FB Marketplace", icon: "📘", status: "coming_soon" },
-      { id: "kijiji", name: "Kijiji", icon: "🟢", status: "coming_soon" },
+      { id: "facebook", name: "FB Marketplace", icon: "📘", status: "active" },
+      { id: "kijiji", name: "Kijiji", icon: "🟢", status: "active" },
     ]),
 };
