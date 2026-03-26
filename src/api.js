@@ -28,7 +28,7 @@ export const api = {
   // Saved searches
   getSavedSearches: () => fetchJSON('/saved-searches'),
   createSavedSearch: (data) => fetchJSON('/saved-searches', { method: 'POST', body: JSON.stringify(data) }),
-  deleteSavedSearch: (id) => fetchJSON(`/saved-searches/${id}`, { method: 'DELETE' }),
+  deleteSavedSearch: (id) => fetchJSON(`/saved-searches?id=${id}`, { method: 'DELETE' }),
 
   // Marketplaces
   getMarketplaces: () => fetchJSON('/marketplaces'),

@@ -1,0 +1,16 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "build-output",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/api/search", "destination": "/api/search" },
+    { "source": "/api/marketplaces", "destination": "/api/marketplaces" },
+    { "source": "/api/saved-searches", "destination": "/api/saved-searches" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/search.js": {
+      "maxDuration": 15
+    }
+  }
+}
