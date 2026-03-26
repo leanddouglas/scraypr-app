@@ -27,7 +27,11 @@ export default function ResultsBrowser() {
       const data = await api.getScrapers();
       setScrapers(data);
       if (!selectedScraperId && data.length > 0) {
-        setSelectedScraperId(data[0].id);
+        // Default to the scraper with the most records so the page isn't empty on first load
+        const best = data.reduce((a, b) =>
+          (b.stats?.totalRecords || 0) > (a.stats?.totalRecords || 0) ? b : a
+        , data[0]);
+        setSelectedScraperId(best.id);
       }
     } catch (err) {
       console.error('Failed to load scrapers:', err);
