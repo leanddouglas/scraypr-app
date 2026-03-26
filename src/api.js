@@ -1,48 +1,16 @@
-const API_BASE = '/api';
-
-async function fetchJSON(url, opts = {}) {
-  const res = await fetch(API_BASE + url, {
-    headers: { 'Content-Type': 'application/json', ...opts.headers },
-    ...opts,
-  });
-  if (!res.ok) {
-    // Safely handle non-JSON error responses (e.g., HTML error pages)
-    let errMsg = res.statusText || 'Request failed';
-    try {
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const err = await res.json();
-        errMsg = err.error || errMsg;
-      }
-    } catch {
-      // Ignore JSON parse errors
-    }
-    throw new Error(errMsg);
-  }
-  return res.json();
-}
+import { searchMarketplaces, getSavedSearches, saveSavedSearch, deleteSavedSearch } from './scraper';
 
 export const api = {
-  // Scrapers
-  getScrapers: () => fetchJSON('/scrapers'),
-  getScraper: (id) => fetchJSON(`/scrapers/${id}`),
-  createScraper: (data) => fetchJSON('/scrapers', { method: 'POST', body: JSON.stringify(data) }),
-  updateScraper: (id, data) => fetchJSON(`/scrapers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteScraper: (id) => fetchJSON(`/scrapers/${id}`, { method: 'DELETE' }),
-
-  // Scraping
-  runScrape: (id) => fetchJSON(`/scrapers/${id}/run`, { method: 'POST' }),
-  getResults: (id) => fetchJSON(`/scrapers/${id}/results`),
-  getLogs: (id) => fetchJSON(`/scrapers/${id}/logs`),
-
-  // Preview
-  previewSelector: (url, selector) =>
-    fetchJSON('/preview-selector', { method: 'POST', body: JSON.stringify({ url, selector }) }),
-
-  // Smart Search
-  smartSearch: (query, opts = {}) =>
-    fetchJSON('/search', { method: 'POST', body: JSON.stringify({ query, ...opts }) }),
-
-  // Stats
-  getStats: () => fetchJSON('/stats'),
+  search: (query, marketplaces, location) => searchMarketplaces(query, marketplaces, location),
+  getSavedSearches: () => Promise.resolve(getSavedSearches()),
+  createSavedSearch: (data) => Promise.resolve(saveSavedSearch(data)),
+  deleteSavedSearch: (id) => { deleteSavedSearch(id); return Promise.resolve({ success: true }); },
+  getMarketplaces: () =>
+    Promise.resolve([
+      { id: "craigslist", name: "Craigslist", icon: "🏷️", status: "active" },
+      { id: "ebay", name: "eBay", icon: "🛒", status: "active" },
+      { id: "autotrader", name: "AutoTrader", icon: "🚗", status: "active" },
+      { id: "facebook", name: "FB Marketplace", icon: "📘", status: "active" },
+      { id: "kijiji", name: "Kijiji", icon: "🟢", status: "active" },
+    ]),
 };

@@ -1,27 +1,20 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
-import SmartSearch from './pages/SmartSearch';
-import Dashboard from './pages/Dashboard';
-import CreateScraper from './pages/CreateScraper';
-import ResultsBrowser from './pages/ResultsBrowser';
-import ScraperSettings from './pages/ScraperSettings';
-import UserGuide from './pages/UserGuide';
+import Home from './pages/Home';
+import SearchResults from './pages/SearchResults';
+import SavedSearches from './pages/SavedSearches';
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={<SmartSearch />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="create" element={<CreateScraper />} />
-          <Route path="data" element={<ResultsBrowser />} />
-          <Route path="data/:scraperId" element={<ResultsBrowser />} />
-          <Route path="settings/:scraperId" element={<ScraperSettings />} />
-          <Route path="guide" element={<UserGuide />} />
+          <Route index element={<Home />} />
+          <Route path="search" element={<SearchResults />} />
+          <Route path="saved" element={<SavedSearches />} />
         </Route>
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
