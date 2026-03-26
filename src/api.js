@@ -1,35 +1,26 @@
-const API_BASE = '/api';
-
-async function fetchJSON(url, opts = {}) {
-  const res = await fetch(API_BASE + url, {
-    headers: { 'Content-Type': 'application/json', ...opts.headers },
-    ...opts,
-  });
-  if (!res.ok) {
-    let errMsg = res.statusText || 'Request failed';
-    try {
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const err = await res.json();
-        errMsg = err.error || errMsg;
-      }
-    } catch {}
-    throw new Error(errMsg);
-  }
-  return res.json();
-}
+/**
+ * API layer — uses client-side scraping (no backend needed).
+ * All scraping happens in the browser via CORS proxy + DOMParser.
+ * Saved searches persist in localStorage.
+ */
+import { searchMarketplaces, getSavedSearches, saveSavedSearch, deleteSavedSearch } from './scraper';
 
 export const api = {
-  // Search
-  search: (query, marketplaces, location) =>
-    fetchJSON('/search', { method: 'POST', body: JSON.stringify({ query, marketplaces, location }) }),
-  getSearchResults: (id) => fetchJSON(`/search/${id}`),
+  // Search — runs client-side scraping
+  search: (query, marketplaces, location) => searchMarketplaces(query, marketplaces, location),
 
-  // Saved searches
-  getSavedSearches: () => fetchJSON('/saved-searches'),
-  createSavedSearch: (data) => fetchJSON('/saved-searches', { method: 'POST', body: JSON.stringify(data) }),
-  deleteSavedSearch: (id) => fetchJSON(`/saved-searches?id=${id}`, { method: 'DELETE' }),
+  // Saved searches — uses localStorage
+  getSavedSearches: () => Promise.resolve(getSavedSearches()),
+  createSavedSearch: (data) => Promise.resolve(saveSavedSearch(data)),
+  deleteSavedSearch: (id) => { deleteSavedSearch(id); return Promise.resolve({ success: true }); },
 
-  // Marketplaces
-  getMarketplaces: () => fetchJSON('/marketplaces'),
+  // Marketplaces — static data
+  getMarketplaces: () =>
+    Promise.resolve([
+      { id: "craigslist", name: "Craigslist", icon: "🏷️", status: "active" },
+      { id: "autotrader", name: "AutoTrader", icon: "🚗", status: "active" },
+      { id: "ebay", name: "eBay", icon: "🛒", status: "active" },
+      { id: "facebook", name: "FB Marketplace", icon: "📘", status: "coming_soon" },
+      { id: "kijiji", name: "Kijiji", icon: "🟢", status: "coming_soon" },
+    ]),
 };
