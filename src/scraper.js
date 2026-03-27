@@ -348,7 +348,7 @@ function getFacebookDeals(query, location) {
   ];
 }
 
-// ============ SEARCH ORCHESTRATOR ============
+// ============ REVERB ============
 function computeStats(deals) {
   const priced = deals.filter((d) => d.price !== null && d.price > 0);
   if (priced.length === 0) return { avgPrice: 0, lowestPrice: 0, highestPrice: 0, totalDeals: deals.length, pricedDeals: 0 };
@@ -404,7 +404,15 @@ export async function searchMarketplaces(query, marketplaces, location) {
     }
   }
 
-  await Promise.all(tasks);
+  if (marketplaces.includes("reverb")) {
+        tasks.push(
+                fetchWithProxy(buildReverbUrl(query))
+                  .then((html) => { allDeals.push(...scrapeReverb(html)); })
+                  .catch((e) => { errors.push(`Reverb: ${e.message}`); })
+              );
+  }
+
+    await Promise.all(tasks);
 
   // Sort by price ascending
   allDeals.sort((a, b) => {
