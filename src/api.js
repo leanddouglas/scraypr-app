@@ -12,5 +12,6 @@ export const api = {
       { id: "autotrader", name: "AutoTrader", icon: "🚗", status: "active" },
       { id: "facebook", name: "FB Marketplace", icon: "📘", status: "active" },
       { id: "kijiji", name: "Kijiji", icon: "🟢", status: "active" },
+      { id: "reverb", name: "Reverb", icon: "🎸", status: "active" },
     ]),
 };
