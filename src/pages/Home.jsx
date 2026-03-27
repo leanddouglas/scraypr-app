@@ -19,7 +19,7 @@ const MARKETPLACES = [
   { id: 'ebay', name: 'eBay', icon: '🛒', active: true },
   { id: 'autotrader', name: 'AutoTrader', icon: '🚗', active: true },
   { id: 'facebook', name: 'FB Marketplace', icon: '📘', active: true },
-  { id: 'kijiji', name: 'Kijiji', icon: '🟢', active: true },
+  { id: 'kijiji', name: 'Kijiji', icon: '🟢', active: true },    { id: 'reverb', name: 'Reverb', icon: '🎸', active: true },
   ];
 
 export default function Home() {
@@ -239,7 +239,7 @@ export default function Home() {
               <footer className="border-t border-outline-variant/10 px-6 py-4">
                       <div className="max-w-4xl mx-auto flex justify-center gap-8 sm:gap-16 text-center">
                                 <div>
-                                            <div className="font-headline font-bold text-primary text-lg">5</div>
+                                            <div className="font-headline font-bold text-primary text-lg">6</div>
                                             <div className="font-label text-xs text-on-surface-variant">Marketplaces</div>
                                 </div>
                                 <div>
