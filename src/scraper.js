@@ -353,6 +353,65 @@ function computeStats(deals) {
   const priced = deals.filter((d) => d.price !== null && d.price > 0);
   if (priced.length === 0) return { avgPrice: 0, lowestPrice: 0, highestPrice: 0, totalDeals: deals.length, pricedDeals: 0 };
   const prices = priced.map((d) => d.price);
+  function buildReverbUrl(query) {
+      return `https://reverb.com/marketplace?query=${encodeURIComponent(query)}`;
+  }
+
+  function scrapeReverb(html) {
+      const doc = parseHTML(html);
+      const deals = [];
+      const items = doc.querySelectorAll(".tiles-tile, [class*='product-card'], .grid-card");
+      items.forEach((el, i) => {
+            if (i >= 30) return;
+            const titleEl = el.querySelector("a[class*='title'], .grid-card-text, h4, h3, [class*='Title']");
+            const title = titleEl?.textContent?.trim() || "";
+            const priceEl = el.querySelector("[class*='price'], .grid-card-upper-right, [class*='Price']");
+            const priceText = priceEl?.textContent?.trim() || "";
+            const price = priceText ? parseFloat(priceText.replace(/[^0-9.]/g, "")) || null : null;
+            const linkEl = el.querySelector("a[href*='/item/']") || el.querySelector("a");
+            const href = linkEl?.getAttribute("href") || "";
+            const img = el.querySelector("img")?.getAttribute("src") || el.querySelector("img")?.getAttribute("data-src") || null;
+            if (title && title.length > 3) {
+                    deals.push({
+                              id: `rv-${i}-${Date.now()}`,
+                              title,
+                              price,
+                              priceText: priceText || "See listing",
+                              image: img,
+                              url: href.startsWith("http") ? href : `https://reverb.com${href}`,
+                              marketplace: "reverb",
+                              location: "Worldwide",
+                              postedAt: new Date().toISOString(),
+                    });
+            }
+      });
+      if (deals.length === 0) {
+            const allLinks = doc.querySelectorAll("a[href*='/item/']");
+            const seen = new Set();
+            allLinks.forEach((a, i) => {
+                    if (i >= 40) return;
+                    const href = a.getAttribute("href") || "";
+                    if (seen.has(href)) return;
+                    seen.add(href);
+                    const title = a.textContent?.trim() || a.getAttribute("aria-label") || "";
+                    if (title && title.length > 5 && title.length < 200) {
+                              deals.push({
+                                          id: `rv-fb-${deals.length}-${Date.now()}`,
+                                          title,
+                                          price: null,
+                                          priceText: "See listing",
+                                          image: null,
+                                          url: href.startsWith("http") ? href : `https://reverb.com${href}`,
+                                          marketplace: "reverb",
+                                          location: "Worldwide",
+                                          postedAt: new Date().toISOString(),
+                              });
+                    }
+            });
+      }
+      return deals;
+  }
+  
   return {
     avgPrice: Math.round(prices.reduce((a, b) => a + b, 0) / prices.length),
     lowestPrice: Math.min(...prices),
