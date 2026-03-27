@@ -23,6 +23,7 @@ const AVAILABLE_SITES = [
   { id: 'ebay',       name: 'eBay',       color: '#e53e3e' },
   { id: 'kijiji',     name: 'Kijiji',     color: '#38a169' },
   { id: 'autotrader', name: 'AutoTrader', color: '#dd6b20' },
+    { id: 'reverb',      name: 'Reverb',     color: '#f56b00' },
   ];
 
 function SkeletonCard() {
@@ -173,7 +174,7 @@ export default function SmartSearch() {
                                               <span className="text-primary text-glow-primary">everywhere</span>span>
                                   </h1>h1>
                                   <p className="text-on-surface-variant text-base sm:text-lg mb-8 max-w-xl mx-auto">
-                                              One search across Craigslist, eBay, Kijiji, and AutoTrader — with smart filters built in.
+                                              One search across Craigslist, eBay, Kijiji, AutoTrader, and Reverb — with smart filters built in.
                                   </p>p>
                         
                           {/* Search bar */}
