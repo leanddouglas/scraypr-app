@@ -9,8 +9,9 @@ function DealCard({ deal }) {
     ebay: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
     kijiji: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
     facebook: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+        reverb: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
   };
-  const marketplaceIcons = { craigslist: '🏷️', autotrader: '🚗', ebay: '🛒', kijiji: '🟢', facebook: '📘' };
+  const marketplaceIcons = { craigslist: '🏷️', autotrader: '🚗', ebay: '🛒', kijiji: '🟢', facebook: '📘', reverb: '🎸' };
 
   // Special styling for Facebook redirect card
   const isRedirect = deal.isRedirect;
