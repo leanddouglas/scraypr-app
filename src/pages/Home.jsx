@@ -168,7 +168,7 @@ export default function Home() {
                                                             className="w-full px-3 py-2 rounded-lg text-left font-label text-xs transition-all hover:bg-primary/10 text-primary flex items-center gap-2 mb-1"
                                                           >
                                                           <span className="material-symbols-outlined text-xs">add_location</span>span>
-                                                          Use "{locationInput.trim()}"
+                                            {`Use "${locationInput.trim()}"`}
                                         </button>button>
                                     )}
                         {/* Suggestions list */}
