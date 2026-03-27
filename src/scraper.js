@@ -1,4 +1,4 @@
-——/**
+/**
  * Client-side marketplace scraper using CORS proxies + DOMParser.
  * No server needed — runs entirely in the browser.
  */
